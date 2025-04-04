@@ -3,7 +3,7 @@
     <!-- 主色调 -->
     <color name="primary">#1A72C4</color>
     <color name="primary_dark">#0D47A1</color>
-    <color name="primary_light">#1E88E5</color>
+    <color name="primary_light">#1565C0</color>
     <color name="accent">#FF4081</color>
     
     <!-- 文本颜色 -->
@@ -22,15 +22,22 @@
     <color name="surface_color">#1E1E1E</color>
     <color name="card_background">#252525</color>
     
-    <!-- 天气背景颜色 -->
-    <color name="sunny_start">#1E4687</color>
-    <color name="sunny_end">#2A5DB0</color>
-    <color name="cloudy_start">#343434</color>
-    <color name="cloudy_end">#4E4E4E</color>
-    <color name="rainy_start">#2A2A2A</color>
-    <color name="rainy_end">#454F4E</color>
-    <color name="night_start">#121212</color>
-    <color name="night_end">#1F1F1F</color>
+    <!-- 天气背景颜色 - 夜间模式下更深沉的色调 -->
+    <!-- 晴天 - 更深的蓝色 -->
+    <color name="sunny_start">#1565C0</color>
+    <color name="sunny_end">#1976D2</color>
+    
+    <!-- 多云/阴天 - 深灰色 -->
+    <color name="cloudy_start">#37474F</color>
+    <color name="cloudy_end">#455A64</color>
+    
+    <!-- 雨天 - 更暗的灰蓝色 -->
+    <color name="rainy_start">#263238</color>
+    <color name="rainy_end">#37474F</color>
+    
+    <!-- 夜间 - 深蓝黑色 -->
+    <color name="night_start">#0D1B3E</color>
+    <color name="night_end">#162A5C</color>
     
     <!-- 空气质量颜色 - 调整为深色模式下更明显的颜色 -->
     <color name="good_air_quality">#00E676</color>

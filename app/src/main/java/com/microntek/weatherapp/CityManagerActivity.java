@@ -6,6 +6,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import androidx.annotation.NonNull;
 
 import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -42,6 +43,7 @@ public class CityManagerActivity extends AppCompatActivity implements CityAdapte
     private RecyclerView recyclerView;
     private EditText searchEditText;
     private View loadingView;
+    private com.google.android.material.bottomnavigation.BottomNavigationView bottomNavigationView;
     
     private CityAdapter cityAdapter;
     private CityPreferences cityPreferences;
@@ -63,6 +65,7 @@ public class CityManagerActivity extends AppCompatActivity implements CityAdapte
         recyclerView = findViewById(R.id.recycler_view);
         searchEditText = findViewById(R.id.et_search);
         loadingView = findViewById(R.id.loading_view);
+        bottomNavigationView = findViewById(R.id.bottom_navigation);
         
         // 设置工具栏
         androidx.appcompat.widget.Toolbar toolbar = findViewById(R.id.toolbar);
@@ -83,6 +86,58 @@ public class CityManagerActivity extends AppCompatActivity implements CityAdapte
         
         // 设置搜索栏
         setupSearchBar();
+        
+        // 设置底部导航栏
+        setupBottomNavigation();
+    }
+    
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // 设置底部导航选中状态为城市
+        if (bottomNavigationView != null) {
+            bottomNavigationView.setSelectedItemId(R.id.navigation_city);
+        }
+    }
+    
+    /**
+     * 设置底部导航栏
+     */
+    private void setupBottomNavigation() {
+        // 设置选中状态为城市
+        bottomNavigationView.setSelectedItemId(R.id.navigation_city);
+        
+        // 设置导航栏项目点击事件
+        bottomNavigationView.setOnNavigationItemSelectedListener(item -> {
+            Intent intent;
+            switch (item.getItemId()) {
+                case R.id.navigation_home:
+                    // 导航到主页
+                    finish();
+                    overridePendingTransition(0, 0);
+                    return true;
+                case R.id.navigation_city:
+                    // 已经在城市管理页面，无需处理
+                    return true;
+                case R.id.navigation_air:
+                    // 导航到空气质量页面
+                    intent = new Intent(this, com.microntek.weatherapp.ui.AirQualityActivity.class);
+                    intent.setFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+                    startActivity(intent);
+                    finish();
+                    overridePendingTransition(0, 0);
+                    return true;
+                case R.id.navigation_settings:
+                    // 导航到设置页面
+                    intent = new Intent(this, com.microntek.weatherapp.ui.SettingsActivity.class);
+                    intent.setFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+                    startActivity(intent);
+                    finish();
+                    overridePendingTransition(0, 0);
+                    return true;
+            }
+            return false;
+        });
     }
     
     /**

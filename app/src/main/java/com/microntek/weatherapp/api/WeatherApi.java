@@ -1,5 +1,6 @@
 package com.microntek.weatherapp.api;
 
+import com.microntek.weatherapp.R;
 import com.microntek.weatherapp.model.City;
 import com.microntek.weatherapp.model.Weather;
 
@@ -204,7 +205,7 @@ public class WeatherApi {
      */
     public static Weather getLifeIndices(String cityId, Weather weather) throws IOException, JSONException {
         // 类型：1.运动 2.洗车 3.穿衣 4.钓鱼 5.紫外线 6.旅游 7.过敏 8.舒适度 9.感冒 10.空调 11.空气污染扩散条件 12.太阳镜 13.化妆 14.晾晒 15.交通 16.防晒
-        String indices = "1,2,3,5,6,8,11,15";
+        String indices = "1,2,3,5,6,8,9,11,15";
         String url = BASE_URL + "/indices/1d?location=" + cityId + "&type=" + indices + "&key=" + API_KEY;
         
         Request request = new Request.Builder()
@@ -398,11 +399,11 @@ public class WeatherApi {
         // 湿度
         weather.setHumidity(Integer.parseInt(now.getString("humidity")));
         
-        // 天气描述
+        // 设置当前天气描述和图标
+        String code = now.getString("icon");
         weather.setWeatherDesc(now.getString("text"));
-        
-        // 图标
-        weather.setWeatherIcon(getWeatherIcon(now.getString("icon")));
+        weather.setWeatherIcon(getWeatherIcon(code));
+        weather.setWeatherIconResource(getWeatherIconResource(code));
         
         // 风力信息
         String windDir = now.getString("windDir");
@@ -422,6 +423,7 @@ public class WeatherApi {
         weather.setWashCarIndex("数据加载中...");
         weather.setTravelIndex("数据加载中...");
         weather.setComfortIndex("数据加载中...");
+        weather.setFluIndex("数据加载中...");
         weather.setAirPollutionIndex("数据加载中...");
         weather.setTrafficIndex("数据加载中...");
         
@@ -484,6 +486,7 @@ public class WeatherApi {
             // 天气描述和图标
             forecast.setWeatherDesc(day.getString("textDay"));
             forecast.setWeatherIcon(getWeatherIcon(day.getString("iconDay")));
+            forecast.setWeatherIconResource(getWeatherIconResource(day.getString("iconDay")));
             
             forecasts.add(forecast);
         }
@@ -538,27 +541,39 @@ public class WeatherApi {
             switch (type) {
                 case "1": // 运动
                     weather.setSportIndex(text);
+                    weather.setSportCategory(category);
                     break;
                 case "2": // 洗车
                     weather.setWashCarIndex(text);
+                    weather.setWashCarCategory(category);
                     break;
                 case "3": // 穿衣
                     weather.setClothesIndex(text);
+                    weather.setClothesCategory(category);
                     break;
                 case "5": // 紫外线
                     weather.setUvIndex(text);
+                    weather.setUvCategory(category);
                     break;
                 case "6": // 旅游
                     weather.setTravelIndex(text);
+                    weather.setTravelCategory(category);
                     break;
                 case "8": // 舒适度
                     weather.setComfortIndex(text);
+                    weather.setComfortCategory(category);
+                    break;
+                case "9": // 感冒
+                    weather.setFluIndex(text);
+                    weather.setFluCategory(category);
                     break;
                 case "11": // 空气污染扩散条件
                     weather.setAirPollutionIndex(text);
+                    weather.setAirPollutionCategory(category);
                     break;
                 case "15": // 交通
                     weather.setTrafficIndex(text);
+                    weather.setTrafficCategory(category);
                     break;
             }
         }
@@ -602,7 +617,30 @@ public class WeatherApi {
     }
     
     /**
-     * 根据天气代码返回对应的天气图标
+     * 根据天气代码返回对应的图标资源ID
+     */
+    private static int getWeatherIconResource(String iconCode) {
+        try {
+            // 添加前缀"icon_"，因为Android资源名称必须以字母开头
+            String resourceName = "icon_" + iconCode;
+            Class<?> drawableClass = R.drawable.class;
+            java.lang.reflect.Field field = drawableClass.getField(resourceName);
+            return field.getInt(null);
+        } catch (Exception e) {
+            // 如果找不到对应的资源，返回默认图标
+            try {
+                // 尝试使用默认图标
+                return R.drawable.class.getField("icon_399").getInt(null);
+            } catch (Exception ex) {
+                // 如果默认图标也不存在，返回0
+                return 0;
+            }
+        }
+    }
+    
+    /**
+     * 根据天气代码返回对应的天气图标（Emoji）
+     * 保留此方法是为了兼容性考虑
      */
     private static String getWeatherIcon(String iconCode) {
         // 和风天气图标编码与emoji映射

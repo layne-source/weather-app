@@ -1,5 +1,6 @@
 package com.microntek.weatherapp.ui;
 
+import android.content.Intent;
 import android.os.Bundle;
 import android.widget.TextView;
 import android.widget.FrameLayout;
@@ -7,11 +8,15 @@ import android.widget.FrameLayout;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.microntek.weatherapp.R;
+import com.microntek.weatherapp.MainActivity;
+import com.microntek.weatherapp.CityManagerActivity;
 import com.microntek.weatherapp.api.WeatherApi;
 import com.microntek.weatherapp.model.City;
 import com.microntek.weatherapp.model.Weather;
 import com.microntek.weatherapp.util.CityPreferences;
 import com.google.android.material.appbar.MaterialToolbar;
+import com.google.android.material.bottomnavigation.BottomNavigationView;
+import android.view.MenuItem;
 
 import org.json.JSONException;
 
@@ -40,6 +45,7 @@ public class AirQualityActivity extends AppCompatActivity {
     private TextView tvSo2;
     private TextView tvNo2;
     private FrameLayout aqiCircleContainer;
+    private BottomNavigationView bottomNavigationView;
     
     // 数据处理
     private CityPreferences cityPreferences;
@@ -57,8 +63,20 @@ public class AirQualityActivity extends AppCompatActivity {
         // 初始化数据
         cityPreferences = new CityPreferences(this);
         
+        // 设置底部导航栏
+        setupBottomNavigation();
+        
         // 加载空气质量数据
         loadAirQualityData();
+    }
+    
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // 设置底部导航选中状态为空气质量
+        if (bottomNavigationView != null) {
+            bottomNavigationView.setSelectedItemId(R.id.navigation_air);
+        }
     }
     
     /**
@@ -76,6 +94,7 @@ public class AirQualityActivity extends AppCompatActivity {
         tvSo2 = findViewById(R.id.tv_so2);
         tvNo2 = findViewById(R.id.tv_no2);
         aqiCircleContainer = findViewById(R.id.aqi_circle_container);
+        bottomNavigationView = findViewById(R.id.bottom_navigation);
         
         // 设置工具栏
         setSupportActionBar(toolbar);
@@ -85,6 +104,49 @@ public class AirQualityActivity extends AppCompatActivity {
         }
         
         toolbar.setNavigationOnClickListener(v -> finish());
+    }
+    
+    /**
+     * 设置底部导航栏
+     */
+    private void setupBottomNavigation() {
+        // 设置选中状态为空气质量
+        bottomNavigationView.setSelectedItemId(R.id.navigation_air);
+        
+        // 设置导航栏项目点击事件
+        bottomNavigationView.setOnNavigationItemSelectedListener(item -> {
+            Intent intent;
+            switch (item.getItemId()) {
+                case R.id.navigation_home:
+                    // 导航到主页
+                    intent = new Intent(this, MainActivity.class);
+                    intent.setFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+                    startActivity(intent);
+                    finish();
+                    overridePendingTransition(0, 0);
+                    return true;
+                case R.id.navigation_city:
+                    // 导航到城市管理
+                    intent = new Intent(this, CityManagerActivity.class);
+                    intent.setFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+                    startActivity(intent);
+                    finish();
+                    overridePendingTransition(0, 0);
+                    return true;
+                case R.id.navigation_air:
+                    // 已经在空气质量页面，无需处理
+                    return true;
+                case R.id.navigation_settings:
+                    // 导航到设置页面
+                    intent = new Intent(this, SettingsActivity.class);
+                    intent.setFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+                    startActivity(intent);
+                    finish();
+                    overridePendingTransition(0, 0);
+                    return true;
+            }
+            return false;
+        });
     }
     
     /**

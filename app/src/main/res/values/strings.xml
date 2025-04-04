@@ -41,6 +41,7 @@
     <string name="sports">运动</string>
     <string name="uv">紫外线</string>
     <string name="uv_index">紫外线指数</string>
+    <string name="air_pollution">空气污染</string>
     
     <!-- 城市管理 -->
     <string name="city_manager">城市管理</string>
@@ -79,4 +80,10 @@
     
     <!-- 小部件 -->
     <string name="widget_name">天气小部件</string>
+    
+    <!-- 新增生活指数图标描述字符串 -->
+    <string name="city_list">城市列表</string>
+    <string name="life_index_icon">生活指数图标</string>
+    <string name="life_indices">生活指数</string>
+    <string name="weather_icon_description">天气图标</string>
 </resources> 

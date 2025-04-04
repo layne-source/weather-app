@@ -18,6 +18,7 @@ public class Weather {
     // 天气描述
     private String weatherDesc;
     private String weatherIcon;
+    private int weatherIconResource; // 新增图标资源ID属性
     
     // 其他天气信息
     private String wind;
@@ -37,13 +38,23 @@ public class Weather {
     
     // 生活指数
     private String clothesIndex;    // 穿衣指数
+    private String clothesCategory; // 穿衣指数简洁描述
     private String sportIndex;      // 运动指数
+    private String sportCategory;   // 运动指数简洁描述
     private String uvIndex;         // 紫外线指数
+    private String uvCategory;      // 紫外线指数简洁描述
     private String washCarIndex;    // 洗车指数
+    private String washCarCategory; // 洗车指数简洁描述
     private String travelIndex;     // 旅游指数
+    private String travelCategory;  // 旅游指数简洁描述
     private String comfortIndex;    // 舒适度指数
+    private String comfortCategory; // 舒适度指数简洁描述
     private String airPollutionIndex; // 空气污染扩散条件
+    private String airPollutionCategory; // 空气污染扩散条件简洁描述
     private String trafficIndex;    // 交通指数
+    private String trafficCategory; // 交通指数简洁描述
+    private String fluIndex;        // 感冒指数
+    private String fluCategory;     // 感冒指数简洁描述
     
     // 天气预报
     private List<DailyForecast> dailyForecasts;
@@ -103,6 +114,14 @@ public class Weather {
     
     public void setWeatherIcon(String weatherIcon) {
         this.weatherIcon = weatherIcon;
+    }
+    
+    public int getWeatherIconResource() {
+        return weatherIconResource;
+    }
+    
+    public void setWeatherIconResource(int weatherIconResource) {
+        this.weatherIconResource = weatherIconResource;
     }
     
     public String getWind() {
@@ -209,12 +228,28 @@ public class Weather {
         this.clothesIndex = clothesIndex;
     }
     
+    public String getClothesCategory() {
+        return clothesCategory;
+    }
+    
+    public void setClothesCategory(String clothesCategory) {
+        this.clothesCategory = clothesCategory;
+    }
+    
     public String getSportIndex() {
         return sportIndex;
     }
     
     public void setSportIndex(String sportIndex) {
         this.sportIndex = sportIndex;
+    }
+    
+    public String getSportCategory() {
+        return sportCategory;
+    }
+    
+    public void setSportCategory(String sportCategory) {
+        this.sportCategory = sportCategory;
     }
     
     public String getUvIndex() {
@@ -225,12 +260,28 @@ public class Weather {
         this.uvIndex = uvIndex;
     }
     
+    public String getUvCategory() {
+        return uvCategory;
+    }
+    
+    public void setUvCategory(String uvCategory) {
+        this.uvCategory = uvCategory;
+    }
+    
     public String getWashCarIndex() {
         return washCarIndex;
     }
     
     public void setWashCarIndex(String washCarIndex) {
         this.washCarIndex = washCarIndex;
+    }
+    
+    public String getWashCarCategory() {
+        return washCarCategory;
+    }
+    
+    public void setWashCarCategory(String washCarCategory) {
+        this.washCarCategory = washCarCategory;
     }
     
     public String getTravelIndex() {
@@ -241,12 +292,28 @@ public class Weather {
         this.travelIndex = travelIndex;
     }
     
+    public String getTravelCategory() {
+        return travelCategory;
+    }
+    
+    public void setTravelCategory(String travelCategory) {
+        this.travelCategory = travelCategory;
+    }
+    
     public String getComfortIndex() {
         return comfortIndex;
     }
     
     public void setComfortIndex(String comfortIndex) {
         this.comfortIndex = comfortIndex;
+    }
+    
+    public String getComfortCategory() {
+        return comfortCategory;
+    }
+    
+    public void setComfortCategory(String comfortCategory) {
+        this.comfortCategory = comfortCategory;
     }
     
     public String getAirPollutionIndex() {
@@ -257,12 +324,44 @@ public class Weather {
         this.airPollutionIndex = airPollutionIndex;
     }
     
+    public String getAirPollutionCategory() {
+        return airPollutionCategory;
+    }
+    
+    public void setAirPollutionCategory(String airPollutionCategory) {
+        this.airPollutionCategory = airPollutionCategory;
+    }
+    
     public String getTrafficIndex() {
         return trafficIndex;
     }
     
     public void setTrafficIndex(String trafficIndex) {
         this.trafficIndex = trafficIndex;
+    }
+    
+    public String getTrafficCategory() {
+        return trafficCategory;
+    }
+    
+    public void setTrafficCategory(String trafficCategory) {
+        this.trafficCategory = trafficCategory;
+    }
+    
+    public String getFluIndex() {
+        return fluIndex;
+    }
+    
+    public void setFluIndex(String fluIndex) {
+        this.fluIndex = fluIndex;
+    }
+    
+    public String getFluCategory() {
+        return fluCategory;
+    }
+    
+    public void setFluCategory(String fluCategory) {
+        this.fluCategory = fluCategory;
     }
     
     public List<DailyForecast> getDailyForecasts() {
@@ -283,6 +382,7 @@ public class Weather {
         private int lowTemp;
         private String weatherDesc;
         private String weatherIcon;
+        private int weatherIconResource; // 新增图标资源ID属性
         
         public String getDate() {
             return date;
@@ -330,6 +430,14 @@ public class Weather {
         
         public void setWeatherIcon(String weatherIcon) {
             this.weatherIcon = weatherIcon;
+        }
+        
+        public int getWeatherIconResource() {
+            return weatherIconResource;
+        }
+        
+        public void setWeatherIconResource(int weatherIconResource) {
+            this.weatherIconResource = weatherIconResource;
         }
     }
 }
