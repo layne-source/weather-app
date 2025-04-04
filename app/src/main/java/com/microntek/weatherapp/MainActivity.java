@@ -19,6 +19,7 @@ import android.widget.Toast;
 import com.microntek.weatherapp.api.WeatherApi;
 import com.microntek.weatherapp.model.City;
 import com.microntek.weatherapp.model.Weather;
+import com.microntek.weatherapp.ui.CityManagerActivity;
 import com.microntek.weatherapp.util.AirPollutionUtil;
 import com.microntek.weatherapp.util.CityPreferences;
 import com.microntek.weatherapp.util.WeatherBackgroundUtil;
@@ -55,6 +56,16 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
     private final Executor executor = Executors.newSingleThreadExecutor();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     
+    // 添加请求码常量
+    private static final int REQUEST_CODE_CITY_MANAGER = 1001;
+    private static final int REQUEST_CODE_AIR_QUALITY = 1002;
+    private static final int REQUEST_CODE_SETTINGS = 1003;
+    
+    // 添加用于记录返回键按下时间和首次启动标志
+    private static boolean isFirstLaunch = true;
+    private long lastBackPressTime = 0;
+    private static final long EXIT_TIMEOUT = 2000; // 2秒内连按两次返回键退出
+    
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         // 应用主题设置
@@ -74,16 +85,22 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
         
         // 加载天气数据
         loadWeatherData();
+        
+        // 检查启动标志
+        if (getIntent().getBooleanExtra("fromOtherActivity", false)) {
+            isFirstLaunch = false;
+        }
     }
     
     @Override
-    protected void onResume() {
-        super.onResume();
-        // 每次回到页面时重新加载数据
-        loadWeatherData();
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
         
-        // 重置底部导航栏选中状态为首页
-        bottomNavigationView.setSelectedItemId(R.id.navigation_home);
+        // 如果是从其他Activity返回
+        if (intent.getBooleanExtra("fromOtherActivity", false)) {
+            isFirstLaunch = false;
+        }
     }
     
     /**
@@ -392,7 +409,7 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
                 // 使用无动画切换方式
                 intent = new Intent(this, CityManagerActivity.class);
                 intent.setFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
-                startActivity(intent);
+                startActivityForResult(intent, REQUEST_CODE_CITY_MANAGER);
                 overridePendingTransition(0, 0);
                 return true;
                 
@@ -400,7 +417,7 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
                 // 使用无动画切换方式
                 intent = new Intent(this, com.microntek.weatherapp.ui.AirQualityActivity.class);
                 intent.setFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
-                startActivity(intent);
+                startActivityForResult(intent, REQUEST_CODE_AIR_QUALITY);
                 overridePendingTransition(0, 0);
                 return true;
                 
@@ -408,7 +425,7 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
                 // 使用无动画切换方式
                 intent = new Intent(this, com.microntek.weatherapp.ui.SettingsActivity.class);
                 intent.setFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
-                startActivity(intent);
+                startActivityForResult(intent, REQUEST_CODE_SETTINGS);
                 overridePendingTransition(0, 0);
                 return true;
         }
@@ -421,7 +438,7 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
     private void navigateToCityManager() {
         Intent intent = new Intent(this, CityManagerActivity.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
-        startActivity(intent);
+        startActivityForResult(intent, REQUEST_CODE_CITY_MANAGER);
         overridePendingTransition(0, 0);
     }
     
@@ -455,5 +472,43 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
             tvAirQuality.setTextColor(getResources().getColor(R.color.hazardous_air_quality));
             tvAqi.setTextColor(getResources().getColor(R.color.hazardous_air_quality));
         }
+    }
+    
+    // 修改返回键处理
+    @Override
+    public void onBackPressed() {
+        // 如果不是首次启动或者最近2秒内按过返回键，则直接退出
+        if (!isFirstLaunch || System.currentTimeMillis() - lastBackPressTime < EXIT_TIMEOUT) {
+            finish();
+            return;
+        }
+        
+        // 记录时间并提示用户再按一次退出
+        lastBackPressTime = System.currentTimeMillis();
+        Toast.makeText(this, "再按一次返回键退出应用", Toast.LENGTH_SHORT).show();
+    }
+    
+    /**
+     * 处理Activity返回结果
+     */
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        
+        // 如果有返回数据且包含标志位
+        if (resultCode == RESULT_OK && data != null && data.getBooleanExtra("fromOtherActivity", false)) {
+            // 设置当前Activity的标志位
+            getIntent().putExtra("fromOtherActivity", true);
+        }
+    }
+    
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // 每次回到页面时重新加载数据
+        loadWeatherData();
+        
+        // 重置底部导航栏选中状态为首页
+        bottomNavigationView.setSelectedItemId(R.id.navigation_home);
     }
 } 

@@ -1,56 +1,54 @@
 <?xml version="1.0" encoding="utf-8"?>
-<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
-    style="@style/CardView.LifeIndex"
     android:layout_width="0dp"
     android:layout_height="wrap_content"
-    android:layout_weight="1">
+    android:layout_weight="1"
+    android:layout_marginStart="3dp"
+    android:layout_marginEnd="3dp"
+    android:layout_marginTop="3dp"
+    android:layout_marginBottom="3dp"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="6dp">
 
-    <LinearLayout
-        android:layout_width="match_parent"
+    <FrameLayout
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginBottom="6dp"
+        android:background="@drawable/circle_index_background"
+        android:padding="8dp">
+
+        <ImageView
+            android:id="@+id/iv_index_icon"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/life_index_icon"
+            app:tint="?attr/colorOnPrimary"
+            tools:src="@drawable/ic_clothes" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/tv_index_name"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:textColor="?attr/colorOnSurface"
+        android:textSize="13sp"
+        tools:text="穿衣" />
+
+    <TextView
+        android:id="@+id/tv_index_category"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:textColor="?attr/colorPrimary"
+        android:textSize="14sp"
+        android:textStyle="bold"
         android:gravity="center"
-        android:orientation="vertical"
-        android:padding="6dp">
+        android:maxLines="1"
+        android:ellipsize="end"
+        tools:text="炎热" />
 
-        <FrameLayout
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:layout_marginBottom="6dp"
-            android:background="@drawable/circle_index_background"
-            android:padding="8dp">
-
-            <ImageView
-                android:id="@+id/iv_index_icon"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:contentDescription="@string/life_index_icon"
-                app:tint="?attr/colorOnPrimary"
-                tools:src="@drawable/ic_clothes" />
-        </FrameLayout>
-
-        <TextView
-            android:id="@+id/tv_index_name"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:textColor="?attr/colorOnSurface"
-            android:textSize="13sp"
-            tools:text="穿衣" />
-
-        <TextView
-            android:id="@+id/tv_index_category"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:textColor="?attr/colorPrimary"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:gravity="center"
-            android:maxLines="1"
-            android:ellipsize="end"
-            tools:text="炎热" />
-
-    </LinearLayout>
-</com.google.android.material.card.MaterialCardView> 
+</LinearLayout> 

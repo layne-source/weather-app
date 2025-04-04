@@ -1,4 +1,4 @@
-package com.microntek.weatherapp;
+package com.microntek.weatherapp.ui;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -15,6 +15,7 @@ import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
@@ -24,21 +25,21 @@ import android.widget.ImageButton;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.microntek.weatherapp.MainActivity;
+import com.microntek.weatherapp.R;
 import com.microntek.weatherapp.adapter.CityAdapter;
 import com.microntek.weatherapp.api.WeatherApi;
 import com.microntek.weatherapp.model.City;
 import com.microntek.weatherapp.util.CityPreferences;
 
-import org.json.JSONException;
-
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import com.google.android.material.bottomnavigation.BottomNavigationView;
 
-public class CityManagerActivity extends AppCompatActivity implements CityAdapter.OnCityClickListener {
+public class CityManagerActivity extends AppCompatActivity implements CityAdapter.OnCityClickListener, BottomNavigationView.OnNavigationItemSelectedListener {
     
     private RecyclerView recyclerView;
     private EditText searchEditText;
@@ -108,36 +109,49 @@ public class CityManagerActivity extends AppCompatActivity implements CityAdapte
         bottomNavigationView.setSelectedItemId(R.id.navigation_city);
         
         // 设置导航栏项目点击事件
-        bottomNavigationView.setOnNavigationItemSelectedListener(item -> {
-            Intent intent;
-            switch (item.getItemId()) {
-                case R.id.navigation_home:
-                    // 导航到主页
-                    finish();
-                    overridePendingTransition(0, 0);
-                    return true;
-                case R.id.navigation_city:
-                    // 已经在城市管理页面，无需处理
-                    return true;
-                case R.id.navigation_air:
-                    // 导航到空气质量页面
-                    intent = new Intent(this, com.microntek.weatherapp.ui.AirQualityActivity.class);
-                    intent.setFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
-                    startActivity(intent);
-                    finish();
-                    overridePendingTransition(0, 0);
-                    return true;
-                case R.id.navigation_settings:
-                    // 导航到设置页面
-                    intent = new Intent(this, com.microntek.weatherapp.ui.SettingsActivity.class);
-                    intent.setFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
-                    startActivity(intent);
-                    finish();
-                    overridePendingTransition(0, 0);
-                    return true;
-            }
-            return false;
-        });
+        bottomNavigationView.setOnNavigationItemSelectedListener(this);
+    }
+    
+    /**
+     * 底部导航栏点击事件
+     */
+    @Override
+    public boolean onNavigationItemSelected(@NonNull MenuItem item) {
+        Intent intent;
+        switch (item.getItemId()) {
+            case R.id.navigation_home:
+                // 返回主页并设置标志
+                intent = new Intent(this, MainActivity.class);
+                intent.putExtra("fromOtherActivity", true);
+                intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                startActivity(intent);
+                finish();
+                overridePendingTransition(0, 0);
+                return true;
+                
+            case R.id.navigation_city:
+                // 已经在城市管理页面，不需要处理
+                return true;
+                
+            case R.id.navigation_air:
+                // 切换到空气质量页面
+                intent = new Intent(this, com.microntek.weatherapp.ui.AirQualityActivity.class);
+                intent.setFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+                startActivity(intent);
+                finish();
+                overridePendingTransition(0, 0);
+                return true;
+                
+            case R.id.navigation_settings:
+                // 切换到设置页面
+                intent = new Intent(this, com.microntek.weatherapp.ui.SettingsActivity.class);
+                intent.setFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+                startActivity(intent);
+                finish();
+                overridePendingTransition(0, 0);
+                return true;
+        }
+        return false;
     }
     
     /**
@@ -405,7 +419,7 @@ public class CityManagerActivity extends AppCompatActivity implements CityAdapte
     }
     
     /**
-     * 切换当前城市
+     * 切换当前城市，并返回主页
      */
     private void switchCurrentCity(City city) {
         // 设置当前城市
@@ -441,7 +455,11 @@ public class CityManagerActivity extends AppCompatActivity implements CityAdapte
         
         Toast.makeText(this, "已切换到城市: " + city.getName(), Toast.LENGTH_SHORT).show();
         
-        // 返回主页
+        // 返回主页并设置标志位
+        Intent intent = new Intent(this, MainActivity.class);
+        intent.putExtra("fromOtherActivity", true);
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        startActivity(intent);
         finish();
     }
     
@@ -670,5 +688,14 @@ public class CityManagerActivity extends AppCompatActivity implements CityAdapte
         }
         // 显示搜索结果
         showSearchResults();
+    }
+
+    @Override
+    public void finish() {
+        // 在返回MainActivity之前，设置标志位
+        Intent intent = new Intent();
+        intent.putExtra("fromOtherActivity", true);
+        setResult(RESULT_OK, intent);
+        super.finish();
     }
 } 

@@ -5,11 +5,11 @@ import android.os.Bundle;
 import android.widget.TextView;
 import android.widget.FrameLayout;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.microntek.weatherapp.R;
 import com.microntek.weatherapp.MainActivity;
-import com.microntek.weatherapp.CityManagerActivity;
 import com.microntek.weatherapp.api.WeatherApi;
 import com.microntek.weatherapp.model.City;
 import com.microntek.weatherapp.model.Weather;
@@ -31,7 +31,7 @@ import android.graphics.drawable.GradientDrawable;
 /**
  * 空气质量详情页面
  */
-public class AirQualityActivity extends AppCompatActivity {
+public class AirQualityActivity extends AppCompatActivity implements BottomNavigationView.OnNavigationItemSelectedListener {
 
     // UI组件
     private MaterialToolbar toolbar;
@@ -114,39 +114,7 @@ public class AirQualityActivity extends AppCompatActivity {
         bottomNavigationView.setSelectedItemId(R.id.navigation_air);
         
         // 设置导航栏项目点击事件
-        bottomNavigationView.setOnNavigationItemSelectedListener(item -> {
-            Intent intent;
-            switch (item.getItemId()) {
-                case R.id.navigation_home:
-                    // 导航到主页
-                    intent = new Intent(this, MainActivity.class);
-                    intent.setFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
-                    startActivity(intent);
-                    finish();
-                    overridePendingTransition(0, 0);
-                    return true;
-                case R.id.navigation_city:
-                    // 导航到城市管理
-                    intent = new Intent(this, CityManagerActivity.class);
-                    intent.setFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
-                    startActivity(intent);
-                    finish();
-                    overridePendingTransition(0, 0);
-                    return true;
-                case R.id.navigation_air:
-                    // 已经在空气质量页面，无需处理
-                    return true;
-                case R.id.navigation_settings:
-                    // 导航到设置页面
-                    intent = new Intent(this, SettingsActivity.class);
-                    intent.setFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
-                    startActivity(intent);
-                    finish();
-                    overridePendingTransition(0, 0);
-                    return true;
-            }
-            return false;
-        });
+        bottomNavigationView.setOnNavigationItemSelectedListener(this);
     }
     
     /**
@@ -237,5 +205,56 @@ public class AirQualityActivity extends AppCompatActivity {
             drawable.setColor(getResources().getColor(R.color.hazardous_air_quality));
             tvAqiStatus.setText("严重污染");
         }
+    }
+
+    @Override
+    public void finish() {
+        // 在返回MainActivity之前，设置标志位
+        Intent intent = new Intent();
+        intent.putExtra("fromOtherActivity", true);
+        setResult(RESULT_OK, intent);
+        super.finish();
+    }
+
+    /**
+     * 底部导航栏点击事件
+     */
+    @Override
+    public boolean onNavigationItemSelected(@NonNull MenuItem item) {
+        Intent intent;
+        switch (item.getItemId()) {
+            case R.id.navigation_home:
+                // 返回主页并设置标志
+                intent = new Intent(this, MainActivity.class);
+                intent.putExtra("fromOtherActivity", true);
+                intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                startActivity(intent);
+                finish();
+                overridePendingTransition(0, 0);
+                return true;
+                
+            case R.id.navigation_city:
+                // 切换到城市管理
+                intent = new Intent(this, CityManagerActivity.class);
+                intent.setFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+                startActivity(intent);
+                finish();
+                overridePendingTransition(0, 0);
+                return true;
+                
+            case R.id.navigation_air:
+                // 已经在空气质量页面，不需要处理
+                return true;
+                
+            case R.id.navigation_settings:
+                // 切换到设置页面
+                intent = new Intent(this, SettingsActivity.class);
+                intent.setFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+                startActivity(intent);
+                finish();
+                overridePendingTransition(0, 0);
+                return true;
+        }
+        return false;
     }
 } 

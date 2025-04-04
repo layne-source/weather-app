@@ -6,20 +6,20 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.view.MenuItem;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.app.AppCompatDelegate;
 import androidx.appcompat.widget.SwitchCompat;
 import androidx.appcompat.widget.Toolbar;
 
 import com.microntek.weatherapp.R;
 import com.microntek.weatherapp.MainActivity;
-import com.microntek.weatherapp.CityManagerActivity;
 import com.microntek.weatherapp.util.ThemeHelper;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
-public class SettingsActivity extends AppCompatActivity {
+public class SettingsActivity extends AppCompatActivity implements BottomNavigationView.OnNavigationItemSelectedListener {
     
     private static final String PREFS_NAME = "weather_settings";
     private static final String KEY_DARK_MODE = "dark_mode";
@@ -89,39 +89,7 @@ public class SettingsActivity extends AppCompatActivity {
         bottomNavigationView.setSelectedItemId(R.id.navigation_settings);
         
         // 设置导航栏项目点击事件
-        bottomNavigationView.setOnNavigationItemSelectedListener(item -> {
-            Intent intent;
-            switch (item.getItemId()) {
-                case R.id.navigation_home:
-                    // 导航到主页
-                    intent = new Intent(this, MainActivity.class);
-                    intent.setFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
-                    startActivity(intent);
-                    finish();
-                    overridePendingTransition(0, 0);
-                    return true;
-                case R.id.navigation_city:
-                    // 导航到城市管理
-                    intent = new Intent(this, CityManagerActivity.class);
-                    intent.setFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
-                    startActivity(intent);
-                    finish();
-                    overridePendingTransition(0, 0);
-                    return true;
-                case R.id.navigation_air:
-                    // 导航到空气质量页面
-                    intent = new Intent(this, AirQualityActivity.class);
-                    intent.setFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
-                    startActivity(intent);
-                    finish();
-                    overridePendingTransition(0, 0);
-                    return true;
-                case R.id.navigation_settings:
-                    // 已经在设置页面，无需处理
-                    return true;
-            }
-            return false;
-        });
+        bottomNavigationView.setOnNavigationItemSelectedListener(this);
     }
     
     /**
@@ -129,5 +97,56 @@ public class SettingsActivity extends AppCompatActivity {
      */
     public static void applyTheme(Context context) {
         ThemeHelper.applyTheme(context);
+    }
+    
+    @Override
+    public void finish() {
+        // 在返回MainActivity之前，设置标志位
+        Intent intent = new Intent();
+        intent.putExtra("fromOtherActivity", true);
+        setResult(RESULT_OK, intent);
+        super.finish();
+    }
+    
+    /**
+     * 底部导航栏点击事件
+     */
+    @Override
+    public boolean onNavigationItemSelected(@NonNull MenuItem item) {
+        Intent intent;
+        switch (item.getItemId()) {
+            case R.id.navigation_home:
+                // 返回主页并设置标志
+                intent = new Intent(this, MainActivity.class);
+                intent.putExtra("fromOtherActivity", true);
+                intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                startActivity(intent);
+                finish();
+                overridePendingTransition(0, 0);
+                return true;
+                
+            case R.id.navigation_city:
+                // 切换到城市管理
+                intent = new Intent(this, CityManagerActivity.class);
+                intent.setFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+                startActivity(intent);
+                finish();
+                overridePendingTransition(0, 0);
+                return true;
+                
+            case R.id.navigation_air:
+                // 切换到空气质量页面
+                intent = new Intent(this, com.microntek.weatherapp.ui.AirQualityActivity.class);
+                intent.setFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+                startActivity(intent);
+                finish();
+                overridePendingTransition(0, 0);
+                return true;
+                
+            case R.id.navigation_settings:
+                // 已经在设置页面，不需要处理
+                return true;
+        }
+        return false;
     }
 } 

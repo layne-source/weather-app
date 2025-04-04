@@ -29,7 +29,7 @@
 
         <!-- 城市管理活动 -->
         <activity 
-            android:name=".CityManagerActivity"
+            android:name=".ui.CityManagerActivity"
             android:exported="false" />
             
         <!-- 空气质量活动 -->
