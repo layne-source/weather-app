@@ -1,0 +1,89 @@
+# Android Studio / IntelliJ IDEA
+.idea/
+*.iml
+.gradle/
+local.properties
+.DS_Store
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Build output directories
+/build/
+/app/build/
+/*/build/
+/out/
+
+# Gradle
+gradle/
+gradle.properties
+gradlew
+gradlew.bat
+
+# Generated files
+bin/
+gen/
+out/
+
+# Built application files
+*.apk
+*.aar
+*.ap_
+*.aab
+
+# Files for the Dalvik VM / ART
+*.dex
+
+# Java class files
+*.class
+
+# Generated files
+.navigation/
+output.json
+output-metadata.json
+
+# Log Files
+*.log
+
+# Android Profiling
+*.hprof
+
+# Keystore files
+*.jks
+*.keystore
+
+# Google Services (e.g. for Firebase)
+google-services.json
+
+# Fastlane / deployment related
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/
+fastlane/test_output
+fastlane/readme.md
+
+# Crashlytics / Firebase
+crashlytics-build.properties
+com_crashlytics_export_strings.xml
+firebase-debug.log
+
+# Kotlin
+.kotlin/
+
+# Versionator (if used)
+__pycache__/
+*.py[cod]
+
+# Android Studio Patch
+!/gradle/wrapper/gradle-wrapper.jar
+
+# External native build folder generated in Android Studio
+.externalNativeBuild
+.cxx
+
+# Eclipse specific files (if still needed)
+.classpath
+.project
+.settings/
+.metadata/
+

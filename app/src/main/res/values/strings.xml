@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">天气预报</string>
+    
+    <!-- 主页面相关 -->
+    <string name="today">今天</string>
+    <string name="tomorrow">明天</string>
+    <string name="day_after_tomorrow">后天</string>
+    <string name="temperature_format">%1$d°C ~ %2$d°C</string>
+    <string name="current_temperature">%1$d°</string>
+    
+    <!-- 天气描述 -->
+    <string name="weather_sunny">晴天</string>
+    <string name="weather_cloudy">多云</string>
+    <string name="weather_rainy">雨</string>
+    <string name="weather_snow">雪</string>
+    <string name="weather_foggy">雾</string>
+    
+    <!-- 空气质量 -->
+    <string name="air_quality">空气质量</string>
+    <string name="air_quality_excellent">优</string>
+    <string name="air_quality_good">良好</string>
+    <string name="air_quality_moderate">中等</string>
+    <string name="air_quality_poor">较差</string>
+    <string name="air_quality_very_poor">差</string>
+    <string name="aqi">AQI</string>
+    <string name="pm25">PM2.5</string>
+    <string name="pm10">PM10</string>
+    
+    <!-- 详细信息 -->
+    <string name="details">详细信息</string>
+    <string name="wind">风力</string>
+    <string name="humidity">湿度</string>
+    <string name="sunrise">日出</string>
+    <string name="sunset">日落</string>
+    <string name="humidity_format">%1$d%%</string>
+    
+    <!-- 生活指数 -->
+    <string name="life_index">生活指数</string>
+    <string name="clothes">穿衣</string>
+    <string name="sports">运动</string>
+    <string name="uv">紫外线</string>
+    <string name="uv_index">紫外线指数</string>
+    
+    <!-- 城市管理 -->
+    <string name="city_manager">城市管理</string>
+    <string name="add_city">添加城市</string>
+    <string name="search_city">搜索城市</string>
+    <string name="current_location">当前位置</string>
+    <string name="delete">删除</string>
+    
+    <!-- 底部导航 -->
+    <string name="tab_home">首页</string>
+    <string name="tab_city">城市</string>
+    <string name="tab_air">空气</string>
+    <string name="tab_settings">设置</string>
+    
+    <!-- 设置 -->
+    <string name="settings">设置</string>
+    <string name="appearance">外观</string>
+    <string name="dark_mode">深色模式</string>
+    <string name="dark_mode_desc">启用后将使用深色主题</string>
+    <string name="follow_system">跟随系统</string>
+    <string name="follow_system_desc">跟随系统设置的深色模式</string>
+    <string name="about">关于</string>
+    <string name="version">版本</string>
+    <string name="temperature_unit">温度单位</string>
+    <string name="celsius">摄氏度 (°C)</string>
+    <string name="fahrenheit">华氏度 (°F)</string>
+    <string name="auto_update">自动更新</string>
+    <string name="notification">通知栏显示天气</string>
+    <string name="language">语言</string>
+    
+    <!-- 错误信息 -->
+    <string name="error_location">无法获取位置信息</string>
+    <string name="error_network">网络连接失败</string>
+    <string name="error_data">数据加载失败</string>
+    <string name="retry">重试</string>
+    
+    <!-- 小部件 -->
+    <string name="widget_name">天气小部件</string>
+</resources> 

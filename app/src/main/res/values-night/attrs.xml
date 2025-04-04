@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 深色模式下使用的特殊属性 -->
+    <attr name="switchThumbColor" format="color" />
+    <attr name="switchTrackColor" format="color" />
+    <attr name="dividerColor" format="color" />
+</resources> 

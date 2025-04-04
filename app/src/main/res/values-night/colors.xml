@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 主色调 -->
+    <color name="primary">#1A72C4</color>
+    <color name="primary_dark">#0D47A1</color>
+    <color name="primary_light">#1E88E5</color>
+    <color name="accent">#FF4081</color>
+    
+    <!-- 文本颜色 -->
+    <color name="primary_text">#E0E0E0</color>
+    <color name="secondary_text">#B0B0B0</color>
+    
+    <!-- 基础颜色 -->
+    <color name="white">#FFFFFF</color>
+    <color name="light_gray">#272727</color>
+    <color name="gray">#2D2D2D</color>
+    <color name="dark_gray">#555555</color>
+    <color name="black">#000000</color>
+    
+    <!-- 深色模式背景颜色 -->
+    <color name="background_color">#121212</color>
+    <color name="surface_color">#1E1E1E</color>
+    <color name="card_background">#252525</color>
+    
+    <!-- 天气背景颜色 -->
+    <color name="sunny_start">#1E4687</color>
+    <color name="sunny_end">#2A5DB0</color>
+    <color name="cloudy_start">#343434</color>
+    <color name="cloudy_end">#4E4E4E</color>
+    <color name="rainy_start">#2A2A2A</color>
+    <color name="rainy_end">#454F4E</color>
+    <color name="night_start">#121212</color>
+    <color name="night_end">#1F1F1F</color>
+    
+    <!-- 空气质量颜色 - 调整为深色模式下更明显的颜色 -->
+    <color name="good_air_quality">#00E676</color>
+    <color name="moderate_air_quality">#FFD600</color>
+    <color name="sensitive_group_air_quality">#FFAB40</color>
+    <color name="unhealthy_air_quality">#FF5252</color>
+    <color name="very_unhealthy_air_quality">#E040FB</color>
+    <color name="hazardous_air_quality">#FF1744</color>
+    
+    <!-- 空气质量指数颜色 -->
+    <color name="aqi_excellent">#00E676</color>
+    <color name="aqi_good">#8BC34A</color>
+    <color name="aqi_moderate">#FFC107</color>
+    <color name="aqi_poor">#FF9800</color>
+    <color name="aqi_very_poor">#F44336</color>
+    
+    <!-- 列表项背景颜色 -->
+    <color name="selected_bg">#1E4987</color>
+    <color name="normal_bg">#252525</color>
+    
+    <!-- 图标颜色 -->
+    <color name="icons">#FFFFFF</color>
+    
+    <!-- 分隔线颜色 -->
+    <color name="divider">#383838</color>
+    
+    <!-- 表格行背景颜色 -->
+    <color name="table_row_even">#2D2D2D</color>
+    <color name="table_row_odd">#252525</color>
+    <color name="table_header_background">#1A4887</color>
+</resources> 
