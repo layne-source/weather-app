@@ -86,7 +86,7 @@
                             android:layout_height="36dp"
                             android:layout_marginEnd="10dp"
                             android:contentDescription="@string/weather_icon_description"
-                            tools:src="@drawable/100" />
+                            tools:src="@drawable/icon_100" />
 
                         <TextView
                             android:id="@+id/tv_weather_desc"

@@ -1,5 +1,7 @@
 package com.microntek.weatherapp.model;
 
+import com.microntek.weatherapp.R;
+
 /**
  * 城市数据模型类
  */
@@ -16,6 +18,8 @@ public class City {
     private int temperature;     // 当前温度
     private String weatherDesc;  // 天气描述
     private String weatherIcon;  // 天气图标
+    private String airQuality;   // 空气质量
+    private int aqi;             // 空气质量指数
 
     // 构造函数
     public City() {
@@ -109,6 +113,42 @@ public class City {
 
     public void setWeatherIcon(String weatherIcon) {
         this.weatherIcon = weatherIcon;
+    }
+
+    public String getAirQuality() {
+        return airQuality;
+    }
+
+    public void setAirQuality(String airQuality) {
+        this.airQuality = airQuality;
+    }
+
+    public int getAqi() {
+        return aqi;
+    }
+
+    public void setAqi(int aqi) {
+        this.aqi = aqi;
+    }
+    
+    /**
+     * 根据AQI值获取对应的背景颜色资源ID
+     * @return 颜色资源ID
+     */
+    public int getAqiColorRes() {
+        if (aqi <= 50) {
+            return R.color.good_air_quality;
+        } else if (aqi <= 100) {
+            return R.color.moderate_air_quality;
+        } else if (aqi <= 150) {
+            return R.color.sensitive_group_air_quality;
+        } else if (aqi <= 200) {
+            return R.color.unhealthy_air_quality;
+        } else if (aqi <= 300) {
+            return R.color.very_unhealthy_air_quality;
+        } else {
+            return R.color.hazardous_air_quality;
+        }
     }
     
     // 显示在UI中的名称

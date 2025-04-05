@@ -13,6 +13,7 @@ import android.os.Looper;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
+import android.util.Log;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
@@ -27,7 +28,6 @@ import android.widget.Toast;
 
 import com.microntek.weatherapp.MainActivity;
 import com.microntek.weatherapp.R;
-import com.microntek.weatherapp.adapter.CityAdapter;
 import com.microntek.weatherapp.api.WeatherApi;
 import com.microntek.weatherapp.model.City;
 import com.microntek.weatherapp.util.CityPreferences;
@@ -39,14 +39,13 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
-public class CityManagerActivity extends AppCompatActivity implements CityAdapter.OnCityClickListener, BottomNavigationView.OnNavigationItemSelectedListener {
+public class CityManagerActivity extends AppCompatActivity implements BottomNavigationView.OnNavigationItemSelectedListener {
     
     private RecyclerView recyclerView;
     private EditText searchEditText;
     private View loadingView;
     private com.google.android.material.bottomnavigation.BottomNavigationView bottomNavigationView;
     
-    private CityAdapter cityAdapter;
     private CityPreferences cityPreferences;
     private final Executor executor = Executors.newSingleThreadExecutor();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -319,6 +318,10 @@ public class CityManagerActivity extends AppCompatActivity implements CityAdapte
                     city.setWeatherDesc(weather.getWeatherDesc());
                     city.setWeatherIcon(weather.getWeatherIcon());
                     
+                    // 更新空气质量信息
+                    city.setAirQuality(weather.getAirQuality());
+                    city.setAqi(weather.getAqi());
+                    
                     updatedCities.add(city);
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -464,35 +467,6 @@ public class CityManagerActivity extends AppCompatActivity implements CityAdapte
     }
     
     /**
-     * 城市点击事件回调
-     */
-    @Override
-    public void onCityClick(City city, boolean isSavedCity) {
-        if (isSavedCity) {
-            // 点击已保存的城市，切换为当前城市
-            switchCurrentCity(city);
-        } else {
-            // 点击搜索结果中的城市，添加到保存列表
-            addCity(city);
-        }
-    }
-    
-    /**
-     * 城市长按事件回调（仅用于已保存的城市）
-     */
-    @Override
-    public boolean onCityLongClick(City city) {
-        // 长按删除城市（不能删除当前选中的城市）
-        if (city.isCurrentLocation()) {
-            Toast.makeText(this, "不能删除当前选中的城市", Toast.LENGTH_SHORT).show();
-            return true;
-        }
-        
-        deleteCity(city);
-        return true;
-    }
-    
-    /**
      * 城市列表适配器
      */
     private class CityListAdapter extends RecyclerView.Adapter<CityListAdapter.ViewHolder> {
@@ -501,6 +475,7 @@ public class CityManagerActivity extends AppCompatActivity implements CityAdapte
             TextView tvCityName;
             TextView tvWeather;
             TextView tvTemp;
+            TextView tvAirQuality;
             ImageButton btnDelete;
             
             ViewHolder(View itemView) {
@@ -508,6 +483,7 @@ public class CityManagerActivity extends AppCompatActivity implements CityAdapte
                 tvCityName = itemView.findViewById(R.id.tv_city_name);
                 tvWeather = itemView.findViewById(R.id.tv_weather);
                 tvTemp = itemView.findViewById(R.id.tv_temp);
+                tvAirQuality = itemView.findViewById(R.id.tv_air_quality);
                 btnDelete = itemView.findViewById(R.id.btn_delete);
             }
         }
@@ -532,12 +508,25 @@ public class CityManagerActivity extends AppCompatActivity implements CityAdapte
                 holder.tvTemp.setText(String.format("%d°", city.getTemperature()));
             }
             
+            // 显示空气质量信息
+            if (city.getAirQuality() != null && !city.getAirQuality().isEmpty()) {
+                // 格式：空气+质量等级+空格+AQI数值
+                String airQualityText = "空气" + city.getAirQuality() + " " + city.getAqi();
+                holder.tvAirQuality.setText(airQualityText);
+                holder.tvAirQuality.setVisibility(View.VISIBLE);
+                
+                // 根据AQI值设置背景颜色
+                if (city.getAqi() > 0) {
+                    holder.tvAirQuality.setBackgroundResource(city.getAqiColorRes());
+                }
+            } else {
+                holder.tvAirQuality.setVisibility(View.GONE);
+            }
+            
             // 设置选中状态
             boolean isCurrentCity = currentCity != null && 
                     currentCity.getId().equals(city.getId());
-            holder.itemView.setBackgroundResource(isCurrentCity ? 
-                    R.color.selected_bg : R.color.normal_bg);
-            
+
             // 显示或隐藏"当前"标签
             TextView tvCurrentTag = holder.itemView.findViewById(R.id.tv_current_tag);
             if (tvCurrentTag != null) {
@@ -546,15 +535,7 @@ public class CityManagerActivity extends AppCompatActivity implements CityAdapte
             
             // 设置点击事件
             holder.itemView.setOnClickListener(v -> {
-                // 设置为当前选中的城市
-                cityPreferences.setCurrentCity(city);
-                currentCity = city;
-                
-                // 刷新列表
-                notifyDataSetChanged();
-                
-                // 返回主页
-                finish();
+                onCityClick(city, true);
             });
             
             // 设置删除按钮点击事件
@@ -589,6 +570,7 @@ public class CityManagerActivity extends AppCompatActivity implements CityAdapte
             TextView tvCityName;
             TextView tvWeather;
             TextView tvTemp;
+            TextView tvAirQuality;
             ImageButton btnDelete;
             
             ViewHolder(View itemView) {
@@ -596,6 +578,7 @@ public class CityManagerActivity extends AppCompatActivity implements CityAdapte
                 tvCityName = itemView.findViewById(R.id.tv_city_name);
                 tvWeather = itemView.findViewById(R.id.tv_weather);
                 tvTemp = itemView.findViewById(R.id.tv_temp);
+                tvAirQuality = itemView.findViewById(R.id.tv_air_quality);
                 btnDelete = itemView.findViewById(R.id.btn_delete);
                 
                 // 隐藏删除按钮
@@ -624,7 +607,7 @@ public class CityManagerActivity extends AppCompatActivity implements CityAdapte
             // 清空天气信息（搜索结果不显示天气）
             holder.tvWeather.setText("");
             holder.tvTemp.setText("");
-            
+
             // 设置点击事件
             holder.itemView.setOnClickListener(v -> {
                 // 检查是否已存在该城市
@@ -643,14 +626,7 @@ public class CityManagerActivity extends AppCompatActivity implements CityAdapte
                 }
                 
                 // 添加城市
-                cityPreferences.addCity(city);
-                cities.add(city);
-                
-                // 隐藏搜索结果
-                hideSearchResult();
-                
-                // 刷新城市列表
-                cityListAdapter.notifyDataSetChanged();
+                onCityClick(city, false);
             });
         }
 
@@ -697,5 +673,25 @@ public class CityManagerActivity extends AppCompatActivity implements CityAdapte
         intent.putExtra("fromOtherActivity", true);
         setResult(RESULT_OK, intent);
         super.finish();
+    }
+
+    /**
+     * 城市点击事件监听器接口
+     */
+    public interface OnCityClickListener {
+        void onCityClick(City city, boolean isSavedCity);
+    }
+    
+    /**
+     * 城市点击事件回调
+     */
+    public void onCityClick(City city, boolean isSavedCity) {
+        if (isSavedCity) {
+            // 点击已保存的城市，切换为当前城市
+            switchCurrentCity(city);
+        } else {
+            // 点击搜索结果中的城市，添加到保存列表
+            addCity(city);
+        }
     }
 } 

@@ -47,7 +47,7 @@
     <string name="city_manager">城市管理</string>
     <string name="add_city">添加城市</string>
     <string name="search_city">搜索城市</string>
-    <string name="current_location">当前位置</string>
+    <string name="current_location">当前</string>
     <string name="delete">删除</string>
     
     <!-- 底部导航 -->
