@@ -6,18 +6,31 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.util.Log;
 import android.view.MenuItem;
+import android.view.View;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.SwitchCompat;
 import androidx.appcompat.widget.Toolbar;
 
 import com.microntek.weatherapp.R;
 import com.microntek.weatherapp.MainActivity;
+import com.microntek.weatherapp.api.WeatherApi;
+import com.microntek.weatherapp.model.City;
+import com.microntek.weatherapp.util.CityPreferences;
 import com.microntek.weatherapp.util.ThemeHelper;
+import com.microntek.weatherapp.util.WeatherDataCache;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
+
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 
 public class SettingsActivity extends AppCompatActivity implements BottomNavigationView.OnNavigationItemSelectedListener {
     
@@ -28,6 +41,13 @@ public class SettingsActivity extends AppCompatActivity implements BottomNavigat
     private SwitchCompat switchDarkMode;
     private TextView tvVersion;
     private BottomNavigationView bottomNavigationView;
+    private View verifyCacheItem;
+    private View clearCacheItem;
+    
+    // 缓存操作所需
+    private CityPreferences cityPreferences;
+    private final Executor executor = Executors.newSingleThreadExecutor();
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
     
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -46,6 +66,8 @@ public class SettingsActivity extends AppCompatActivity implements BottomNavigat
         switchDarkMode = findViewById(R.id.switch_dark_mode);
         tvVersion = findViewById(R.id.tv_version);
         bottomNavigationView = findViewById(R.id.bottom_navigation);
+        verifyCacheItem = findViewById(R.id.verify_cache_item);
+        clearCacheItem = findViewById(R.id.clear_cache_item);
         
         // 初始化设置
         preferences = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
@@ -67,6 +89,12 @@ public class SettingsActivity extends AppCompatActivity implements BottomNavigat
         } catch (PackageManager.NameNotFoundException e) {
             tvVersion.setText("未知");
         }
+        
+        // 初始化数据
+        cityPreferences = new CityPreferences(this);
+        
+        // 设置缓存管理点击事件
+        setupCacheManagement();
         
         // 设置底部导航栏
         setupBottomNavigation();
@@ -90,6 +118,92 @@ public class SettingsActivity extends AppCompatActivity implements BottomNavigat
         
         // 设置导航栏项目点击事件
         bottomNavigationView.setOnNavigationItemSelectedListener(this);
+    }
+    
+    /**
+     * 设置缓存管理功能
+     */
+    private void setupCacheManagement() {
+        // 验证缓存点击事件
+        verifyCacheItem.setOnClickListener(v -> verifyAndRepairCache());
+        
+        // 清除缓存点击事件
+        clearCacheItem.setOnClickListener(v -> showClearCacheConfirmDialog());
+    }
+    
+    /**
+     * 验证并修复当前城市的缓存
+     */
+    private void verifyAndRepairCache() {
+        City currentCity = cityPreferences.getCurrentCity();
+        if (currentCity == null) {
+            Toast.makeText(this, "没有选择的城市", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        
+        Toast.makeText(this, "正在验证缓存数据...", Toast.LENGTH_SHORT).show();
+        
+        // 在后台线程验证缓存
+        executor.execute(() -> {
+            try {
+                boolean repaired = WeatherApi.verifyAndRepairCacheByLocation(
+                        SettingsActivity.this, currentCity.getLatitude(), currentCity.getLongitude());
+                
+                mainHandler.post(() -> {
+                    if (repaired) {
+                        Toast.makeText(SettingsActivity.this, 
+                                "已修复部分缓存数据", Toast.LENGTH_SHORT).show();
+                    } else {
+                        Toast.makeText(SettingsActivity.this, 
+                                "缓存数据验证完成，未发现问题", Toast.LENGTH_SHORT).show();
+                    }
+                });
+            } catch (Exception e) {
+                Log.e("SettingsActivity", "验证缓存失败: " + e.getMessage());
+                mainHandler.post(() -> {
+                    Toast.makeText(SettingsActivity.this, 
+                            "验证缓存失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                });
+            }
+        });
+    }
+    
+    /**
+     * 显示清除缓存确认对话框
+     */
+    private void showClearCacheConfirmDialog() {
+        new AlertDialog.Builder(this)
+                .setTitle("清除缓存")
+                .setMessage("确定要清除所有缓存的天气数据吗？这将移除所有离线可用的数据。")
+                .setPositiveButton("确定", (dialog, which) -> clearAllCache())
+                .setNegativeButton("取消", null)
+                .show();
+    }
+    
+    /**
+     * 清除所有缓存
+     */
+    private void clearAllCache() {
+        // 在后台线程清除缓存
+        executor.execute(() -> {
+            try {
+                // 初始化缓存管理器
+                WeatherApi.initCache(SettingsActivity.this);
+                // 获取缓存管理器实例并清除所有缓存
+                WeatherDataCache.getInstance(SettingsActivity.this).clearAllCache();
+                
+                mainHandler.post(() -> {
+                    Toast.makeText(SettingsActivity.this, 
+                            "所有缓存已清除", Toast.LENGTH_SHORT).show();
+                });
+            } catch (Exception e) {
+                Log.e("SettingsActivity", "清除缓存失败: " + e.getMessage());
+                mainHandler.post(() -> {
+                    Toast.makeText(SettingsActivity.this, 
+                            "清除缓存失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                });
+            }
+        });
     }
     
     /**

@@ -917,7 +917,7 @@ public class WeatherApi {
     /**
      * 合并天气数据（将天气预报数据合并到当前天气）
      */
-    private static void mergeWeatherData(Weather target, Weather source) {
+    public static void mergeWeatherData(Weather target, Weather source) {
         // 更新当天的最高最低温度
         target.setHighTemp(source.getHighTemp());
         target.setLowTemp(source.getLowTemp());
@@ -1058,5 +1058,40 @@ public class WeatherApi {
         }
         
         return currentWeather;
+    }
+    
+    /**
+     * 验证并修复缓存数据
+     * 检查指定城市的缓存完整性，尝试修复损坏的缓存
+     * @param context 上下文
+     * @param cityId 城市ID或经纬度ID
+     * @return 是否有缓存被修复
+     */
+    public static boolean verifyAndRepairCache(Context context, String cityId) {
+        initCache(context);
+        
+        boolean repaired = weatherDataCache.checkAndRepairCache(cityId);
+        
+        if (repaired) {
+            Log.i("WeatherApi", "已修复城市 " + cityId + " 的部分缓存数据");
+        }
+        
+        // 创建备份
+        weatherDataCache.createBackup();
+        
+        return repaired;
+    }
+    
+    /**
+     * 验证并修复缓存数据
+     * 检查指定城市的缓存完整性，尝试修复损坏的缓存
+     * @param context 上下文
+     * @param lat 纬度
+     * @param lon 经度
+     * @return 是否有缓存被修复
+     */
+    public static boolean verifyAndRepairCacheByLocation(Context context, double lat, double lon) {
+        String locationId = lon + "," + lat;
+        return verifyAndRepairCache(context, locationId);
     }
 } 

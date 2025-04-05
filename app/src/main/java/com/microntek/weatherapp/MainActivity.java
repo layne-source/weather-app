@@ -13,6 +13,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 import android.view.LayoutInflater;
+import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.ImageView;
@@ -96,6 +97,24 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
         swipeRefreshLayout.setOnRefreshListener(this::refreshWeatherData);
         swipeRefreshLayout.setColorSchemeResources(R.color.colorPrimary);
         
+        // 验证当前城市的缓存完整性
+        City currentCity = cityPreferences.getCurrentCity();
+        if (currentCity != null) {
+            String locationId = currentCity.getLongitude() + "," + currentCity.getLatitude();
+            // 在后台线程验证并修复缓存
+            executor.execute(() -> {
+                try {
+                    boolean repaired = WeatherApi.verifyAndRepairCacheByLocation(
+                            MainActivity.this, currentCity.getLatitude(), currentCity.getLongitude());
+                    if (repaired) {
+                        Log.i("MainActivity", "已修复城市 " + currentCity.getName() + " 的部分缓存数据");
+                    }
+                } catch (Exception e) {
+                    Log.e("MainActivity", "验证缓存时出错: " + e.getMessage());
+                }
+            });
+        }
+        
         // 加载天气数据
         loadWeatherData();
         
@@ -172,9 +191,22 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
         // 在后台线程加载数据
         executor.execute(() -> {
             try {
+                final String locationId = city.getLongitude() + "," + city.getLatitude();
+                
                 // 使用带缓存的API获取天气数据
-                final Weather currentWeather = WeatherApi.getCurrentWeatherByLocationWithCache(
-                        MainActivity.this, city.getLatitude(), city.getLongitude());
+                Weather currentWeather;
+                try {
+                    currentWeather = WeatherApi.getCurrentWeatherByLocationWithCache(
+                            MainActivity.this, city.getLatitude(), city.getLongitude());
+                } catch (Exception e) {
+                    Log.e("MainActivity", "获取当前天气失败，尝试修复缓存: " + e.getMessage());
+                    // 尝试修复缓存
+                    WeatherApi.verifyAndRepairCacheByLocation(
+                            MainActivity.this, city.getLatitude(), city.getLongitude());
+                    // 重试获取数据
+                    currentWeather = WeatherApi.getCurrentWeatherByLocationWithCache(
+                            MainActivity.this, city.getLatitude(), city.getLongitude());
+                }
                 
                 if (currentWeather == null) {
                     mainHandler.post(() -> {
@@ -188,53 +220,44 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
                 }
                 
                 // 获取天气预报 - 使用带缓存的API
-                final Weather forecastWeather = WeatherApi.getForecastByLocationWithCache(
-                        MainActivity.this, city.getLatitude(), city.getLongitude());
+                Weather forecastWeather;
+                try {
+                    forecastWeather = WeatherApi.getForecastByLocationWithCache(
+                            MainActivity.this, city.getLatitude(), city.getLongitude());
+                } catch (Exception e) {
+                    Log.e("MainActivity", "获取天气预报失败: " + e.getMessage());
+                    forecastWeather = null;
+                }
+                
+                final Weather finalCurrentWeather = currentWeather;
                 
                 // 合并天气预报数据到当前天气对象
                 if (forecastWeather != null && forecastWeather.getDailyForecasts() != null) {
-                    // 更新当天的最高最低温度
-                    currentWeather.setHighTemp(forecastWeather.getHighTemp());
-                    currentWeather.setLowTemp(forecastWeather.getLowTemp());
-                    
-                    // 如果预报中的日出日落时间存在，也更新它们
-                    if (forecastWeather.getSunrise() != null && !forecastWeather.getSunrise().isEmpty()) {
-                        currentWeather.setSunrise(forecastWeather.getSunrise());
-                    }
-                    if (forecastWeather.getSunset() != null && !forecastWeather.getSunset().isEmpty()) {
-                        currentWeather.setSunset(forecastWeather.getSunset());
-                    }
-                    
-                    // 更新预报列表
-                    currentWeather.setDailyForecasts(forecastWeather.getDailyForecasts());
-                    
-                    // 如果当天预报数据中有更详细的天气描述，也可以更新
-                    if (forecastWeather.getDailyForecasts().size() > 0) {
-                        Weather.DailyForecast todayForecast = forecastWeather.getDailyForecasts().get(0);
-                        if (currentWeather.getWeatherDesc() == null || currentWeather.getWeatherDesc().isEmpty()) {
-                            currentWeather.setWeatherDesc(todayForecast.getWeatherDesc());
-                        }
+                    try {
+                        // 合并天气预报
+                        WeatherApi.mergeWeatherData(finalCurrentWeather, forecastWeather);
+                    } catch (Exception e) {
+                        Log.e("MainActivity", "合并天气预报数据失败: " + e.getMessage());
                     }
                 }
                 
                 // 尝试从缓存获取空气质量数据
-                String locationId = city.getLongitude() + "," + city.getLatitude();
                 try {
-                    WeatherApi.getAirQualityWithCache(MainActivity.this, locationId, currentWeather);
+                    WeatherApi.getAirQualityWithCache(MainActivity.this, locationId, finalCurrentWeather);
                 } catch (Exception e) {
                     Log.e("MainActivity", "获取空气质量数据失败: " + e.getMessage());
                 }
                 
                 // 尝试从缓存获取生活指数数据
                 try {
-                    WeatherApi.getLifeIndicesWithCache(MainActivity.this, locationId, currentWeather);
+                    WeatherApi.getLifeIndicesWithCache(MainActivity.this, locationId, finalCurrentWeather);
                 } catch (Exception e) {
                     Log.e("MainActivity", "获取生活指数数据失败: " + e.getMessage());
                 }
                 
                 // 在主线程更新UI
                 mainHandler.post(() -> {
-                    updateUI(currentWeather);
+                    updateUI(finalCurrentWeather);
                     
                     // 如果是下拉刷新，停止刷新动画
                     if (swipeRefreshLayout.isRefreshing()) {
@@ -246,7 +269,7 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
                         refreshWeatherDataInBackground(city);
                     }
                 });
-            } catch (IOException | JSONException e) {
+            } catch (Exception e) {
                 e.printStackTrace();
                 mainHandler.post(() -> {
                     Toast.makeText(MainActivity.this, 
@@ -668,5 +691,24 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
         
         // 重置底部导航栏选中状态为首页
         bottomNavigationView.setSelectedItemId(R.id.navigation_home);
+    }
+    
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.main_menu, menu);
+        return true;
+    }
+    
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        if (item.getItemId() == R.id.action_refresh) {
+            refreshWeatherData();
+            return true;
+        } else if (item.getItemId() == R.id.action_settings) {
+            Intent intent = new Intent(this, com.microntek.weatherapp.ui.SettingsActivity.class);
+            startActivityForResult(intent, REQUEST_CODE_SETTINGS);
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
     }
 } 
