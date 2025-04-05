@@ -31,6 +31,7 @@ import com.google.android.material.bottomnavigation.BottomNavigationView;
 
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
 
 public class SettingsActivity extends AppCompatActivity implements BottomNavigationView.OnNavigationItemSelectedListener {
     
@@ -98,6 +99,29 @@ public class SettingsActivity extends AppCompatActivity implements BottomNavigat
         
         // 设置底部导航栏
         setupBottomNavigation();
+    }
+    
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        
+        // 关闭资源，防止泄漏
+        if (!isChangingConfigurations()) { 
+            // 只有在应用完全退出时才关闭资源，避免因旋转屏幕等配置变化导致的临时销毁
+            try {
+                // 关闭executor
+                if (executor instanceof ExecutorService) {
+                    ((ExecutorService) executor).shutdown();
+                    Log.i("SettingsActivity", "已关闭ExecutorService");
+                }
+                
+                // 关闭全局缓存管理器
+                WeatherDataCache.shutdown();
+                Log.i("SettingsActivity", "已关闭WeatherDataCache");
+            } catch (Exception e) {
+                Log.e("SettingsActivity", "关闭资源失败: " + e.getMessage());
+            }
+        }
     }
     
     @Override

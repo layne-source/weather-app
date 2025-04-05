@@ -29,6 +29,8 @@ import com.microntek.weatherapp.util.AirPollutionUtil;
 import com.microntek.weatherapp.util.CityPreferences;
 import com.microntek.weatherapp.util.WeatherBackgroundUtil;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.microntek.weatherapp.util.WeatherDataCache;
+
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import org.json.JSONException;
@@ -37,6 +39,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
 
 public class MainActivity extends AppCompatActivity implements BottomNavigationView.OnNavigationItemSelectedListener {
     
@@ -710,5 +713,24 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
             return true;
         }
         return super.onOptionsItemSelected(item);
+    }
+    
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        
+        // 关闭executor防止资源泄漏
+        if (!isChangingConfigurations()) {
+            // 只有在应用完全退出时才关闭资源，避免因旋转屏幕等配置变化导致的临时销毁
+            try {
+                if (executor instanceof ExecutorService) {
+                    ((ExecutorService) executor).shutdown();
+                }
+                // 关闭全局缓存管理器
+                WeatherDataCache.shutdown();
+            } catch (Exception e) {
+                Log.e("MainActivity", "关闭资源失败: " + e.getMessage());
+            }
+        }
     }
 } 

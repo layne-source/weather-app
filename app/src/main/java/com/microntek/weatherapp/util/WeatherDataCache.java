@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
+import android.os.StatFs;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.LruCache;
@@ -15,6 +16,7 @@ import com.google.gson.JsonParseException;
 import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
 
+import java.io.File;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -22,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 天气数据缓存管理器
@@ -41,10 +44,14 @@ public class WeatherDataCache {
     private static final String KEY_PREFIX_GEO = "geo_";
     private static final String KEY_PREFIX_TIMESTAMP = "timestamp_";
     private static final String KEY_PREFIX_ERROR_COUNT = "error_count_"; // 错误计数前缀
+    private static final String KEY_APP_USAGE_COUNT = "app_usage_count"; // 应用使用次数
+    private static final String KEY_IMPORTANT_DATA_MODIFIED = "important_data_modified"; // 重要数据修改标记
 
     // 错误恢复常量
     private static final int MAX_ERROR_COUNT = 3; // 最大错误次数，超过此次数将重置缓存
-    private static final long BACKUP_INTERVAL = 24 * 60 * 60 * 1000; // 备份间隔（24小时）
+    private static final long MIN_BACKUP_INTERVAL = 30 * 60 * 1000; // 最小备份间隔（30分钟）
+    private static final long MAX_BACKUP_INTERVAL = 24 * 60 * 60 * 1000; // 最大备份间隔（24小时）
+    private static final long BACKUP_INTERVAL = 12 * 60 * 60 * 1000; // 默认备份间隔（12小时）
     private static final String KEY_LAST_BACKUP_TIME = "last_backup_time"; // 上次备份时间
     
     // 缓存有效期设置（毫秒）
@@ -54,6 +61,7 @@ public class WeatherDataCache {
     private static final long CACHE_DURATION_INDICES = 6 * 60 * 60 * 1000;  // 6小时
     private static final long CACHE_DURATION_CITY_SEARCH = 7 * 24 * 60 * 60 * 1000; // 7天
     private static final long CACHE_DURATION_GEO = 30 * 24 * 60 * 60 * 1000;       // 30天
+    private static final long DEFAULT_CACHE_DURATION = 60 * 60 * 1000;      // 默认缓存时间1小时
     
     // 存储组件
     private final SharedPreferences cachePreferences;
@@ -67,6 +75,7 @@ public class WeatherDataCache {
     private static WeatherDataCache instance;
     private final Context context;
     private final ExecutorService backupExecutor; // 备份线程池
+    private static final Object LOCK = new Object(); // 用于同步的锁对象
     
     private WeatherDataCache(Context context) {
         this.context = context.getApplicationContext();
@@ -97,31 +106,84 @@ public class WeatherDataCache {
     }
     
     /**
+     * 关闭缓存管理器，释放资源
+     * 在应用退出时调用
+     */
+    public static synchronized void shutdown() {
+        if (instance != null && instance.backupExecutor != null) {
+            try {
+                // 执行最后一次备份
+                instance.createBackup();
+                
+                // 等待备份任务完成并关闭线程池
+                instance.backupExecutor.shutdown();
+                if (!instance.backupExecutor.awaitTermination(3, TimeUnit.SECONDS)) {
+                    instance.backupExecutor.shutdownNow();
+                }
+                Log.i(TAG, "缓存管理器已关闭");
+            } catch (Exception e) {
+                Log.e(TAG, "关闭缓存管理器失败: " + e.getMessage());
+                if (instance.backupExecutor != null && !instance.backupExecutor.isShutdown()) {
+                    instance.backupExecutor.shutdownNow();
+                }
+            }
+            instance = null;
+        }
+    }
+    
+    /**
      * 缓存当前天气数据
      */
-    public void cacheCurrentWeather(String cityId, Weather weather) {
-        if (weather == null) return;
+    public synchronized void cacheCurrentWeather(String cityId, Weather weather) {
+        if (cityId == null || weather == null) {
+            Log.w(TAG, "尝试缓存无效的当前天气数据");
+            return;
+        }
         
-        weather.setUpdateTimestamp(System.currentTimeMillis());
         String key = KEY_PREFIX_CURRENT + cityId;
         String timestampKey = KEY_PREFIX_TIMESTAMP + key;
         
-        // 同时更新内存缓存和磁盘缓存
-        memoryCache.put(key, weather);
-        
-        String weatherJson = gson.toJson(weather);
-        long timestamp = System.currentTimeMillis();
-        
-        cachePreferences.edit()
-                .putString(key, weatherJson)
-                .putLong(timestampKey, timestamp)
+        try {
+            weather.setUpdateTimestamp(System.currentTimeMillis());
+            long timestamp = System.currentTimeMillis();
+            String weatherJson = gson.toJson(weather);
+            
+            // 保存到磁盘缓存
+            cachePreferences.edit()
+                    .putString(key, weatherJson)
+                    .putLong(timestampKey, timestamp)
+                    .apply();
+            
+            // 保存到内存缓存
+            memoryCache.put(key, weather);
+            
+            // 标记重要数据已修改
+            cachePreferences.edit()
+                .putBoolean(KEY_IMPORTANT_DATA_MODIFIED, true)
                 .apply();
+            
+            // 增加应用使用计数
+            incrementAppUsageCount();
+            
+            // 重置错误计数
+            resetErrorCount(key);
+            
+            // 检查是否需要创建备份
+            checkAndCreateBackup();
+            
+            Log.d(TAG, "已缓存城市ID: " + cityId + " 的当前天气数据");
+        } catch (Exception e) {
+            Log.e(TAG, "缓存天气数据失败: " + e.getMessage());
+            incrementErrorCount(key);
+        }
     }
     
     /**
      * 获取缓存的当前天气
      */
-    public Weather getCachedCurrentWeather(String cityId) {
+    public synchronized Weather getCachedCurrentWeather(String cityId) {
+        if (cityId == null) return null;
+        
         String key = KEY_PREFIX_CURRENT + cityId;
         String timestampKey = KEY_PREFIX_TIMESTAMP + key;
         
@@ -170,29 +232,56 @@ public class WeatherDataCache {
     /**
      * 缓存天气预报数据
      */
-    public void cacheForecastWeather(String cityId, Weather weather) {
-        if (weather == null) return;
+    public synchronized void cacheForecastWeather(String cityId, Weather weather) {
+        if (cityId == null || weather == null) {
+            Log.w(TAG, "尝试缓存无效的天气预报数据");
+            return;
+        }
         
-        weather.setUpdateTimestamp(System.currentTimeMillis());
         String key = KEY_PREFIX_FORECAST + cityId;
         String timestampKey = KEY_PREFIX_TIMESTAMP + key;
         
-        // 更新内存缓存
-        memoryCache.put(key, weather);
-        
-        String weatherJson = gson.toJson(weather);
-        long timestamp = System.currentTimeMillis();
-        
-        cachePreferences.edit()
-                .putString(key, weatherJson)
-                .putLong(timestampKey, timestamp)
+        try {
+            weather.setUpdateTimestamp(System.currentTimeMillis());
+            long timestamp = System.currentTimeMillis();
+            String weatherJson = gson.toJson(weather);
+            
+            // 保存到磁盘缓存
+            cachePreferences.edit()
+                    .putString(key, weatherJson)
+                    .putLong(timestampKey, timestamp)
+                    .apply();
+            
+            // 保存到内存缓存
+            memoryCache.put(key, weather);
+            
+            // 标记重要数据已修改
+            cachePreferences.edit()
+                .putBoolean(KEY_IMPORTANT_DATA_MODIFIED, true)
                 .apply();
+            
+            // 增加应用使用计数
+            incrementAppUsageCount();
+            
+            // 重置错误计数
+            resetErrorCount(key);
+            
+            // 检查是否需要创建备份
+            checkAndCreateBackup();
+            
+            Log.d(TAG, "已缓存城市ID: " + cityId + " 的天气预报数据");
+        } catch (Exception e) {
+            Log.e(TAG, "缓存预报数据失败: " + e.getMessage());
+            incrementErrorCount(key);
+        }
     }
     
     /**
      * 获取缓存的天气预报
      */
-    public Weather getCachedForecastWeather(String cityId) {
+    public synchronized Weather getCachedForecastWeather(String cityId) {
+        if (cityId == null) return null;
+        
         String key = KEY_PREFIX_FORECAST + cityId;
         String timestampKey = KEY_PREFIX_TIMESTAMP + key;
         
@@ -202,7 +291,6 @@ public class WeatherDataCache {
             if (cachedWeather instanceof Weather) {
                 long timestamp = cachePreferences.getLong(timestampKey, 0);
                 if (!isCacheExpired(timestamp, CACHE_DURATION_FORECAST)) {
-                    // 成功获取缓存，重置错误计数
                     resetErrorCount(key);
                     return (Weather) cachedWeather;
                 }
@@ -216,12 +304,10 @@ public class WeatherDataCache {
                 try {
                     Weather weather = gson.fromJson(weatherJson, Weather.class);
                     memoryCache.put(key, weather); // 更新内存缓存
-                    // 成功获取缓存，重置错误计数
                     resetErrorCount(key);
                     return weather;
                 } catch (JsonSyntaxException e) {
-                    // 解析失败，尝试从备份恢复
-                    Log.e(TAG, "缓存数据解析失败: " + e.getMessage());
+                    Log.e(TAG, "预报缓存数据解析失败: " + e.getMessage());
                     incrementErrorCount(key);
                     Weather weather = restoreFromBackup(key, Weather.class);
                     if (weather != null) {
@@ -230,9 +316,9 @@ public class WeatherDataCache {
                 }
             }
             
-            return null;
+            return null; // 缓存不存在或已过期
         } catch (Exception e) {
-            Log.e(TAG, "获取缓存异常: " + e.getMessage());
+            Log.e(TAG, "获取预报缓存异常: " + e.getMessage());
             incrementErrorCount(key);
             return restoreFromBackup(key, Weather.class);
         }
@@ -241,80 +327,90 @@ public class WeatherDataCache {
     /**
      * 缓存空气质量数据
      */
-    public void cacheAirQuality(String cityId, Weather weather) {
-        if (weather == null) return;
-        
-        // 只保存空气质量相关数据
-        Weather airData = new Weather();
-        airData.setUpdateTimestamp(System.currentTimeMillis());
-        airData.setAirQuality(weather.getAirQuality());
-        airData.setAqi(weather.getAqi());
-        airData.setPm25(weather.getPm25());
-        airData.setPm10(weather.getPm10());
-        airData.setCo(weather.getCo());
-        airData.setSo2(weather.getSo2());
-        airData.setNo2(weather.getNo2());
-        airData.setO3(weather.getO3());
+    public synchronized void cacheAirQuality(String cityId, Weather weather) {
+        if (cityId == null || weather == null) {
+            Log.w(TAG, "尝试缓存无效的空气质量数据");
+            return;
+        }
         
         String key = KEY_PREFIX_AIR + cityId;
         String timestampKey = KEY_PREFIX_TIMESTAMP + key;
         
-        // 更新内存缓存
-        memoryCache.put(key, airData);
-        
-        String airJson = gson.toJson(airData);
-        long timestamp = System.currentTimeMillis();
-        
-        cachePreferences.edit()
-                .putString(key, airJson)
-                .putLong(timestampKey, timestamp)
+        try {
+            weather.setUpdateTimestamp(System.currentTimeMillis());
+            long timestamp = System.currentTimeMillis();
+            String weatherJson = gson.toJson(weather);
+            
+            // 更新内存缓存
+            memoryCache.put(key, weather);
+            
+            // 更新磁盘缓存
+            cachePreferences.edit()
+                    .putString(key, weatherJson)
+                    .putLong(timestampKey, timestamp)
+                    .apply();
+                    
+            // 标记重要数据已修改
+            cachePreferences.edit()
+                .putBoolean(KEY_IMPORTANT_DATA_MODIFIED, true)
                 .apply();
+            
+            // 增加应用使用计数
+            incrementAppUsageCount();
+            
+            // 重置错误计数
+            resetErrorCount(key);
+            
+            Log.d(TAG, "已缓存城市ID: " + cityId + " 的空气质量数据");
+        } catch (Exception e) {
+            Log.e(TAG, "缓存空气质量数据失败: " + e.getMessage());
+            incrementErrorCount(key);
+        }
     }
     
     /**
      * 获取缓存的空气质量数据
      */
-    public Weather getCachedAirQuality(String cityId) {
+    public synchronized Weather getCachedAirQuality(String cityId) {
+        if (cityId == null) return null;
+        
         String key = KEY_PREFIX_AIR + cityId;
         String timestampKey = KEY_PREFIX_TIMESTAMP + key;
         
         try {
             // 先检查内存缓存
-            Object cachedAir = memoryCache.get(key);
-            if (cachedAir instanceof Weather) {
+            Object cachedWeather = memoryCache.get(key);
+            if (cachedWeather instanceof Weather) {
                 long timestamp = cachePreferences.getLong(timestampKey, 0);
                 if (!isCacheExpired(timestamp, CACHE_DURATION_AIR)) {
-                    // 成功获取缓存，重置错误计数
                     resetErrorCount(key);
-                    return (Weather) cachedAir;
+                    return (Weather) cachedWeather;
                 }
             }
             
             // 内存缓存不存在或已过期，检查磁盘缓存
-            String airJson = cachePreferences.getString(key, null);
+            String weatherJson = cachePreferences.getString(key, null);
             long timestamp = cachePreferences.getLong(timestampKey, 0);
             
-            if (airJson != null && !isCacheExpired(timestamp, CACHE_DURATION_AIR)) {
+            if (weatherJson != null && !isCacheExpired(timestamp, CACHE_DURATION_AIR)) {
                 try {
-                    Weather air = gson.fromJson(airJson, Weather.class);
-                    memoryCache.put(key, air); // 更新内存缓存
-                    // 成功获取缓存，重置错误计数
+                    Weather weather = gson.fromJson(weatherJson, Weather.class);
+                    memoryCache.put(key, weather); // 更新内存缓存
                     resetErrorCount(key);
-                    return air;
+                    return weather;
                 } catch (JsonSyntaxException e) {
-                    // 解析失败，尝试从备份恢复
-                    Log.e(TAG, "缓存数据解析失败: " + e.getMessage());
+                    Log.e(TAG, "空气质量缓存数据解析失败: " + e.getMessage());
                     incrementErrorCount(key);
-                    Weather air = restoreFromBackup(key, Weather.class);
-                    if (air != null) {
-                        return air;
+                    Weather weather = restoreFromBackup(key, Weather.class);
+                    if (weather != null) {
+                        return weather;
                     }
                 }
             }
             
-            return null;
+            return null; // 缓存不存在或已过期
         } catch (Exception e) {
-            Log.e(TAG, "获取缓存异常: " + e.getMessage());
+            Log.e(TAG, "获取空气质量缓存异常: " + e.getMessage());
             incrementErrorCount(key);
             return restoreFromBackup(key, Weather.class);
         }
@@ -323,90 +419,90 @@ public class WeatherDataCache {
     /**
      * 缓存生活指数数据
      */
-    public void cacheLifeIndices(String cityId, Weather weather) {
-        if (weather == null) return;
-        
-        // 只保存生活指数相关数据
-        Weather indicesData = new Weather();
-        indicesData.setUpdateTimestamp(System.currentTimeMillis());
-        indicesData.setClothesIndex(weather.getClothesIndex());
-        indicesData.setClothesCategory(weather.getClothesCategory());
-        indicesData.setSportIndex(weather.getSportIndex());
-        indicesData.setSportCategory(weather.getSportCategory());
-        indicesData.setUvIndex(weather.getUvIndex());
-        indicesData.setUvCategory(weather.getUvCategory());
-        indicesData.setWashCarIndex(weather.getWashCarIndex());
-        indicesData.setWashCarCategory(weather.getWashCarCategory());
-        indicesData.setTravelIndex(weather.getTravelIndex());
-        indicesData.setTravelCategory(weather.getTravelCategory());
-        indicesData.setComfortIndex(weather.getComfortIndex());
-        indicesData.setComfortCategory(weather.getComfortCategory());
-        indicesData.setAirPollutionIndex(weather.getAirPollutionIndex());
-        indicesData.setAirPollutionCategory(weather.getAirPollutionCategory());
-        indicesData.setTrafficIndex(weather.getTrafficIndex());
-        indicesData.setTrafficCategory(weather.getTrafficCategory());
-        indicesData.setFluIndex(weather.getFluIndex());
-        indicesData.setFluCategory(weather.getFluCategory());
+    public synchronized void cacheLifeIndices(String cityId, Weather weather) {
+        if (cityId == null || weather == null) {
+            Log.w(TAG, "尝试缓存无效的生活指数数据");
+            return;
+        }
         
         String key = KEY_PREFIX_INDICES + cityId;
         String timestampKey = KEY_PREFIX_TIMESTAMP + key;
         
-        // 更新内存缓存
-        memoryCache.put(key, indicesData);
-        
-        String indicesJson = gson.toJson(indicesData);
-        long timestamp = System.currentTimeMillis();
-        
-        cachePreferences.edit()
-                .putString(key, indicesJson)
-                .putLong(timestampKey, timestamp)
+        try {
+            weather.setUpdateTimestamp(System.currentTimeMillis());
+            long timestamp = System.currentTimeMillis();
+            String weatherJson = gson.toJson(weather);
+            
+            // 更新内存缓存
+            memoryCache.put(key, weather);
+            
+            // 更新磁盘缓存
+            cachePreferences.edit()
+                    .putString(key, weatherJson)
+                    .putLong(timestampKey, timestamp)
+                    .apply();
+                    
+            // 标记重要数据已修改
+            cachePreferences.edit()
+                .putBoolean(KEY_IMPORTANT_DATA_MODIFIED, true)
                 .apply();
+            
+            // 增加应用使用计数
+            incrementAppUsageCount();
+            
+            // 重置错误计数
+            resetErrorCount(key);
+            
+            Log.d(TAG, "已缓存城市ID: " + cityId + " 的生活指数数据");
+        } catch (Exception e) {
+            Log.e(TAG, "缓存生活指数数据失败: " + e.getMessage());
+            incrementErrorCount(key);
+        }
     }
     
     /**
      * 获取缓存的生活指数数据
      */
-    public Weather getCachedLifeIndices(String cityId) {
+    public synchronized Weather getCachedLifeIndices(String cityId) {
+        if (cityId == null) return null;
+        
         String key = KEY_PREFIX_INDICES + cityId;
         String timestampKey = KEY_PREFIX_TIMESTAMP + key;
         
         try {
             // 先检查内存缓存
-            Object cachedIndices = memoryCache.get(key);
-            if (cachedIndices instanceof Weather) {
+            Object cachedWeather = memoryCache.get(key);
+            if (cachedWeather instanceof Weather) {
                 long timestamp = cachePreferences.getLong(timestampKey, 0);
                 if (!isCacheExpired(timestamp, CACHE_DURATION_INDICES)) {
-                    // 成功获取缓存，重置错误计数
                     resetErrorCount(key);
-                    return (Weather) cachedIndices;
+                    return (Weather) cachedWeather;
                 }
             }
             
             // 内存缓存不存在或已过期，检查磁盘缓存
-            String indicesJson = cachePreferences.getString(key, null);
+            String weatherJson = cachePreferences.getString(key, null);
             long timestamp = cachePreferences.getLong(timestampKey, 0);
             
-            if (indicesJson != null && !isCacheExpired(timestamp, CACHE_DURATION_INDICES)) {
+            if (weatherJson != null && !isCacheExpired(timestamp, CACHE_DURATION_INDICES)) {
                 try {
-                    Weather indices = gson.fromJson(indicesJson, Weather.class);
-                    memoryCache.put(key, indices); // 更新内存缓存
-                    // 成功获取缓存，重置错误计数
+                    Weather weather = gson.fromJson(weatherJson, Weather.class);
+                    memoryCache.put(key, weather); // 更新内存缓存
                     resetErrorCount(key);
-                    return indices;
+                    return weather;
                 } catch (JsonSyntaxException e) {
-                    // 解析失败，尝试从备份恢复
-                    Log.e(TAG, "缓存数据解析失败: " + e.getMessage());
+                    Log.e(TAG, "生活指数缓存数据解析失败: " + e.getMessage());
                     incrementErrorCount(key);
-                    Weather indices = restoreFromBackup(key, Weather.class);
-                    if (indices != null) {
-                        return indices;
+                    Weather weather = restoreFromBackup(key, Weather.class);
+                    if (weather != null) {
+                        return weather;
                     }
                 }
             }
             
-            return null;
+            return null; // 缓存不存在或已过期
         } catch (Exception e) {
-            Log.e(TAG, "获取缓存异常: " + e.getMessage());
+            Log.e(TAG, "获取生活指数缓存异常: " + e.getMessage());
             incrementErrorCount(key);
             return restoreFromBackup(key, Weather.class);
         }
@@ -522,13 +618,16 @@ public class WeatherDataCache {
     /**
      * 清除指定城市的所有缓存
      */
-    public void clearCache(String cityId) {
+    public synchronized void clearCache(String cityId) {
         String[] types = {
             KEY_PREFIX_CURRENT, 
             KEY_PREFIX_FORECAST, 
             KEY_PREFIX_AIR, 
             KEY_PREFIX_INDICES
         };
+        
+        // 启动编辑事务
+        SharedPreferences.Editor editor = cachePreferences.edit();
         
         for (String prefix : types) {
             String key = prefix + cityId;
@@ -538,59 +637,88 @@ public class WeatherDataCache {
             memoryCache.remove(key);
             
             // 删除磁盘缓存
-            cachePreferences.edit()
-                    .remove(key)
-                    .remove(timestampKey)
-                    .apply();
+            editor.remove(key).remove(timestampKey);
         }
         
-        Log.i("WeatherDataCache", "已清除城市ID: " + cityId + " 的所有缓存");
+        // 使用commit立即提交更改
+        editor.commit();
+        
+        // 标记重要数据已修改
+        cachePreferences.edit()
+            .putBoolean(KEY_IMPORTANT_DATA_MODIFIED, true)
+            .apply();
+        
+        Log.i(TAG, "已清除城市ID: " + cityId + " 的所有缓存");
     }
     
     /**
      * 清除所有缓存
      */
-    public void clearAllCache() {
+    public synchronized void clearAllCache() {
         // 清除内存缓存
         memoryCache.evictAll();
         
-        // 清除磁盘缓存
-        cachePreferences.edit().clear().apply();
+        // 清除磁盘缓存并立即提交
+        cachePreferences.edit().clear().commit();
         
-        Log.i("WeatherDataCache", "已清除所有缓存");
+        // 标记重要数据已修改
+        cachePreferences.edit()
+            .putBoolean(KEY_IMPORTANT_DATA_MODIFIED, true)
+            .apply();
+        
+        Log.i(TAG, "已清除所有缓存");
     }
     
     /**
      * 清理过期缓存
      */
-    public void cleanExpiredCache() {
-        Map<String, ?> allPrefs = cachePreferences.getAll();
-        SharedPreferences.Editor editor = cachePreferences.edit();
-        long now = System.currentTimeMillis();
-        int cleanedCount = 0;
+    public synchronized void cleanExpiredCache() {
+        Log.d(TAG, "开始清理过期缓存");
         
-        for (String key : allPrefs.keySet()) {
-            if (key.startsWith(KEY_PREFIX_TIMESTAMP)) {
-                long timestamp = (long) allPrefs.get(key);
-                String dataKey = key.substring(KEY_PREFIX_TIMESTAMP.length());
+        try {
+            Map<String, ?> allCache = cachePreferences.getAll();
+            SharedPreferences.Editor editor = cachePreferences.edit();
+            int cleanedCount = 0;
+            
+            for (Map.Entry<String, ?> entry : allCache.entrySet()) {
+                String key = entry.getKey();
                 
-                // 根据不同类型的数据，应用不同的过期策略
-                long duration = getCacheDuration(dataKey);
-                
-                // 超过有效期的数据自动清理
-                if (now - timestamp > duration) {
-                    editor.remove(key);
-                    editor.remove(dataKey);
+                // 只处理时间戳键
+                if (key.startsWith(KEY_PREFIX_TIMESTAMP)) {
+                    long timestamp = 0;
+                    if (entry.getValue() instanceof Long) {
+                        timestamp = (Long) entry.getValue();
+                    }
                     
-                    // 从内存缓存中移除
-                    memoryCache.remove(dataKey);
-                    cleanedCount++;
+                    String originalKey = key.substring(KEY_PREFIX_TIMESTAMP.length());
+                    long cacheDuration = getCacheDurationForKey(originalKey);
+                    
+                    // 如果缓存已过期，删除相关的所有缓存条目
+                    if (isCacheExpired(timestamp, cacheDuration)) {
+                        editor.remove(originalKey);
+                        editor.remove(key);
+                        cleanedCount++;
+                        
+                        // 同时从内存缓存中移除
+                        memoryCache.remove(originalKey);
+                    }
                 }
             }
+            
+            // 提交更改
+            editor.apply();
+            
+            Log.i(TAG, "清理了 " + cleanedCount + " 项过期缓存");
+            
+            // 如果有清理操作，标记重要数据已修改
+            if (cleanedCount > 0) {
+                cachePreferences.edit()
+                    .putBoolean(KEY_IMPORTANT_DATA_MODIFIED, true)
+                    .apply();
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "清理过期缓存失败: " + e.getMessage());
         }
-        
-        editor.apply();
-        Log.i("WeatherDataCache", "清理过期缓存完成，共清理 " + cleanedCount + " 条");
     }
     
     /**
@@ -630,12 +758,18 @@ public class WeatherDataCache {
      * 检查网络连接状态
      */
     public boolean isNetworkAvailable() {
-        ConnectivityManager connectivityManager = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
-        if (connectivityManager != null) {
+        try {
+            ConnectivityManager connectivityManager = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (connectivityManager == null) {
+                return false;
+            }
+            
             NetworkInfo activeNetworkInfo = connectivityManager.getActiveNetworkInfo();
             return activeNetworkInfo != null && activeNetworkInfo.isConnected();
+        } catch (Exception e) {
+            Log.e(TAG, "检查网络状态失败: " + e.getMessage());
+            return false;
         }
-        return false;
     }
     
     /**
@@ -685,8 +819,59 @@ public class WeatherDataCache {
         long lastBackupTime = backupPreferences.getLong(KEY_LAST_BACKUP_TIME, 0);
         long now = System.currentTimeMillis();
         
-        if (now - lastBackupTime > BACKUP_INTERVAL) {
-            backupExecutor.execute(new BackupTask());
+        // 获取应用使用频率
+        int appUsageCount = cachePreferences.getInt(KEY_APP_USAGE_COUNT, 0);
+        boolean importantDataModified = cachePreferences.getBoolean(KEY_IMPORTANT_DATA_MODIFIED, false);
+        
+        // 计算动态备份间隔 - 使用频率越高，备份间隔越短
+        long dynamicInterval = calculateBackupInterval(appUsageCount);
+        
+        // 如果有重要数据修改或超过备份间隔，则创建备份
+        if (importantDataModified || (now - lastBackupTime > dynamicInterval)) {
+            // 检查设备存储空间
+            if (hasEnoughStorage()) {
+                backupExecutor.execute(new BackupTask());
+                
+                // 重置重要数据修改标记
+                cachePreferences.edit()
+                    .putBoolean(KEY_IMPORTANT_DATA_MODIFIED, false)
+                    .apply();
+            } else {
+                Log.w(TAG, "存储空间不足，跳过备份");
+            }
+        }
+    }
+    
+    /**
+     * 根据使用频率计算备份间隔
+     * 使用频率越高，备份间隔越短
+     */
+    private long calculateBackupInterval(int usageCount) {
+        if (usageCount <= 5) {
+            return MAX_BACKUP_INTERVAL; // 低频用户使用最长间隔
+        } else if (usageCount >= 30) {
+            return MIN_BACKUP_INTERVAL; // 高频用户使用最短间隔
+        } else {
+            // 线性插值计算动态间隔
+            return MAX_BACKUP_INTERVAL - 
+                   ((usageCount - 5) * (MAX_BACKUP_INTERVAL - MIN_BACKUP_INTERVAL) / 25);
+        }
+    }
+    
+    /**
+     * 检查设备是否有足够存储空间进行备份
+     */
+    private boolean hasEnoughStorage() {
+        try {
+            File cacheDir = context.getCacheDir();
+            StatFs stats = new StatFs(cacheDir.getAbsolutePath());
+            long availableBytes = stats.getAvailableBytes();
+            
+            // 确保至少有10MB可用空间
+            return availableBytes >= 10 * 1024 * 1024;
+        } catch (Exception e) {
+            Log.e(TAG, "检查存储空间失败: " + e.getMessage());
+            return true; // 默认允许备份
         }
     }
     
@@ -752,7 +937,7 @@ public class WeatherDataCache {
      * @param cityId 城市ID
      * @return 是否有缓存被修复
      */
-    public boolean checkAndRepairCache(String cityId) {
+    public synchronized boolean checkAndRepairCache(String cityId) {
         boolean repaired = false;
         String[] prefixes = {
                 KEY_PREFIX_CURRENT,
@@ -784,83 +969,238 @@ public class WeatherDataCache {
             }
         }
         
+        // 如果进行了修复，立即创建新的备份
+        if (repaired) {
+            createBackup();
+        }
+        
         return repaired;
     }
     
     /**
-     * 检查并修复损坏的缓存数据
-     * @param key 缓存键
-     * @return 是否已修复
+     * 清除损坏的缓存
+     */
+    private boolean clearCorruptedCache(String key) {
+        try {
+            if (key == null || key.isEmpty()) {
+                return false;
+            }
+            
+            Log.w(TAG, "正在清除损坏的缓存: " + key);
+            
+            // 从内存缓存中移除
+            memoryCache.remove(key);
+            
+            // 从磁盘缓存中移除
+            String timestampKey = KEY_PREFIX_TIMESTAMP + key;
+            cachePreferences.edit()
+                .remove(key)
+                .remove(timestampKey)
+                .commit(); // 使用commit确保立即生效
+                
+            // 删除相关错误计数
+            resetErrorCount(key);
+            
+            // 标记重要数据已修改
+            cachePreferences.edit()
+                .putBoolean(KEY_IMPORTANT_DATA_MODIFIED, true)
+                .apply();
+                
+            Log.i(TAG, "已成功清除损坏的缓存: " + key);
+            return true;
+        } catch (Exception e) {
+            Log.e(TAG, "清除损坏缓存失败: " + e.getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * 尝试修复损坏的缓存
      */
     private boolean repairCorruptedCache(String key) {
         try {
-            // 检查是否存在备份数据
-            String backupData = backupPreferences.getString(key, null);
-            if (backupData != null) {
-                // 从备份恢复
-                cachePreferences.edit().putString(key, backupData).apply();
-                
-                // 同时恢复时间戳
-                String timestampKey = KEY_PREFIX_TIMESTAMP + key;
-                long backupTimestamp = backupPreferences.getLong(timestampKey, System.currentTimeMillis());
-                cachePreferences.edit().putLong(timestampKey, backupTimestamp).apply();
-                
-                Log.i(TAG, "已修复损坏的缓存数据: " + key);
-                return true;
+            if (key == null || key.isEmpty()) {
+                return false;
             }
+            
+            Log.i(TAG, "尝试修复损坏的缓存: " + key);
+            
+            // 先尝试从备份恢复
+            Object restoredData = null;
+            
+            if (key.startsWith(KEY_PREFIX_CURRENT) || 
+                key.startsWith(KEY_PREFIX_FORECAST) || 
+                key.startsWith(KEY_PREFIX_AIR) || 
+                key.startsWith(KEY_PREFIX_INDICES)) {
+                restoredData = restoreFromBackup(key, Weather.class);
+            }
+            
+            if (restoredData != null) {
+                // 如果成功恢复，更新缓存
+                memoryCache.put(key, restoredData);
+                
+                // 更新磁盘缓存
+                String timestampKey = KEY_PREFIX_TIMESTAMP + key;
+                long timestamp = System.currentTimeMillis();
+                
+                if (restoredData instanceof Weather) {
+                    cachePreferences.edit()
+                        .putString(key, gson.toJson(restoredData))
+                        .putLong(timestampKey, timestamp)
+                        .commit(); // 使用commit确保立即生效
+                    
+                    // 清除错误计数
+                    resetErrorCount(key);
+                    
+                    Log.i(TAG, "已成功修复损坏的缓存: " + key);
+                    return true;
+                }
+            }
+            
+            Log.w(TAG, "无法修复损坏的缓存: " + key);
+            return false;
         } catch (Exception e) {
-            Log.e(TAG, "修复缓存失败: " + e.getMessage());
+            Log.e(TAG, "修复损坏缓存失败: " + e.getMessage());
+            return false;
         }
-        
-        // 修复失败，清除损坏的数据
-        clearCorruptedCache(key);
-        return false;
     }
     
     /**
-     * 清除损坏的缓存数据
+     * 增加应用使用计数
      */
-    private void clearCorruptedCache(String key) {
-        try {
-            String timestampKey = KEY_PREFIX_TIMESTAMP + key;
-            cachePreferences.edit()
-                    .remove(key)
-                    .remove(timestampKey)
-                    .apply();
-            
-            // 从内存缓存移除
-            memoryCache.remove(key);
-            
-            Log.i(TAG, "已清除损坏的缓存: " + key);
-        } catch (Exception e) {
-            Log.e(TAG, "清除损坏缓存失败: " + e.getMessage());
-        }
+    private void incrementAppUsageCount() {
+        int count = cachePreferences.getInt(KEY_APP_USAGE_COUNT, 0);
+        cachePreferences.edit()
+                .putInt(KEY_APP_USAGE_COUNT, count + 1)
+                .apply();
     }
-    
+
     /**
-     * 记录错误次数
+     * 增加指定键的错误计数
      */
     private void incrementErrorCount(String key) {
-        String errorKey = KEY_PREFIX_ERROR_COUNT + key;
-        int errorCount = cachePreferences.getInt(errorKey, 0) + 1;
-        cachePreferences.edit().putInt(errorKey, errorCount).apply();
-        
-        // 如果错误次数超过阈值，尝试修复或清除
-        if (errorCount >= MAX_ERROR_COUNT) {
-            if (!repairCorruptedCache(key)) {
-                clearCorruptedCache(key);
+        try {
+            String errorKey = KEY_PREFIX_ERROR_COUNT + key;
+            int currentCount = cachePreferences.getInt(errorKey, 0);
+            // 使用commit()立即写入错误计数，确保不会因为应用崩溃而丢失
+            cachePreferences.edit()
+                .putInt(errorKey, currentCount + 1)
+                .commit();
+            
+            if (currentCount + 1 >= MAX_ERROR_COUNT) {
+                Log.w(TAG, "键 " + key + " 已达到错误阈值: " + MAX_ERROR_COUNT);
+                
+                // 如果错误次数超过阈值，尝试修复或清除
+                if (!repairCorruptedCache(key)) {
+                    clearCorruptedCache(key);
+                }
+                // 重置错误计数
+                resetErrorCount(key);
             }
-            // 重置错误计数
-            resetErrorCount(key);
+        } catch (Exception e) {
+            Log.e(TAG, "增加错误计数异常: " + e.getMessage());
         }
     }
     
     /**
-     * 重置错误计数
+     * 重置指定键的错误计数
      */
     private void resetErrorCount(String key) {
-        String errorKey = KEY_PREFIX_ERROR_COUNT + key;
-        cachePreferences.edit().putInt(errorKey, 0).apply();
+        try {
+            String errorKey = KEY_PREFIX_ERROR_COUNT + key;
+            // 检查是否需要重置错误计数
+            int currentCount = cachePreferences.getInt(errorKey, 0);
+            if (currentCount > 0) {
+                // 使用commit()立即写入，确保不会丢失
+                cachePreferences.edit()
+                    .putInt(errorKey, 0)
+                    .commit();
+                Log.d(TAG, "已重置键 " + key + " 的错误计数");
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "重置错误计数异常: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 验证并修复缓存文件的完整性
+     * @return 是否有问题被修复
+     */
+    public synchronized boolean verifyAndRepairCache() {
+        Log.i(TAG, "开始验证和修复缓存...");
+        boolean anyRepaired = false;
+        
+        try {
+            Map<String, ?> allCache = cachePreferences.getAll();
+            SharedPreferences.Editor editor = cachePreferences.edit();
+            int totalEntries = 0;
+            int corruptedEntries = 0;
+            int repairedEntries = 0;
+            
+            // 检查所有weather类型的条目
+            for (Map.Entry<String, ?> entry : allCache.entrySet()) {
+                String key = entry.getKey();
+                
+                // 只验证天气数据，跳过时间戳和错误计数
+                if (key.startsWith(KEY_PREFIX_CURRENT) || 
+                    key.startsWith(KEY_PREFIX_FORECAST) || 
+                    key.startsWith(KEY_PREFIX_AIR) || 
+                    key.startsWith(KEY_PREFIX_INDICES)) {
+                    
+                    totalEntries++;
+                    
+                    if (entry.getValue() instanceof String) {
+                        String value = (String) entry.getValue();
+                        try {
+                            // 验证JSON格式
+                            gson.fromJson(value, Weather.class);
+                            
+                            // 附加验证：检查数据内容的有效性
+                            Weather weather = gson.fromJson(value, Weather.class);
+                            if (weather != null) {
+                                // 检查天气数据的基本有效性
+                                boolean isValid = true;
+                                
+                                // 检查温度是否在合理范围内（-100到+100摄氏度）
+                                if (key.startsWith(KEY_PREFIX_CURRENT)) {
+                                    int temp = weather.getCurrentTemp();
+                                    if (temp < -100 || temp > 100) {
+                                        isValid = false;
+                                    }
+                                }
+                                
+                                if (!isValid) {
+                                    corruptedEntries++;
+                                    if (repairCorruptedCache(key)) {
+                                        repairedEntries++;
+                                        anyRepaired = true;
+                                    }
+                                }
+                            }
+                        } catch (JsonSyntaxException e) {
+                            // 发现格式错误的JSON
+                            corruptedEntries++;
+                            if (repairCorruptedCache(key)) {
+                                repairedEntries++;
+                                anyRepaired = true;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            Log.i(TAG, String.format("缓存验证完成: 共%d项, %d项损坏, %d项已修复", 
+                    totalEntries, corruptedEntries, repairedEntries));
+            
+            // 如果有任何修复，创建一个新的备份
+            if (anyRepaired) {
+                createBackup();
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "验证缓存时发生错误: " + e.getMessage());
+        }
+        
+        return anyRepaired;
     }
     
     /**
@@ -883,5 +1223,22 @@ public class WeatherDataCache {
             Log.e(TAG, "从备份恢复失败: " + e.getMessage());
         }
         return null;
+    }
+
+    /**
+     * 根据键获取对应的缓存持续时间
+     */
+    private long getCacheDurationForKey(String key) {
+        if (key.startsWith(KEY_PREFIX_CURRENT)) {
+            return CACHE_DURATION_CURRENT;
+        } else if (key.startsWith(KEY_PREFIX_FORECAST)) {
+            return CACHE_DURATION_FORECAST;
+        } else if (key.startsWith(KEY_PREFIX_AIR)) {
+            return CACHE_DURATION_AIR;
+        } else if (key.startsWith(KEY_PREFIX_INDICES)) {
+            return CACHE_DURATION_INDICES;
+        } else {
+            return DEFAULT_CACHE_DURATION;
+        }
     }
 } 
