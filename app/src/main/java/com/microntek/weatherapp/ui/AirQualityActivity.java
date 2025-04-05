@@ -4,6 +4,7 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.widget.TextView;
 import android.widget.FrameLayout;
+import android.content.Context;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
@@ -125,9 +126,10 @@ public class AirQualityActivity extends AppCompatActivity implements BottomNavig
         City currentCity = cityPreferences.getCurrentCity();
         
         if (currentCity == null) {
-            // 如果没有选中的城市，使用默认城市（北京）
-            currentCity = new City("北京", "101010100", "北京市", 39.9042, 116.4074);
-            cityPreferences.setCurrentCity(currentCity);
+            // 如果没有选中的城市，显示提示并返回
+            Toast.makeText(this, "请先添加城市", Toast.LENGTH_SHORT).show();
+            finish();
+            return;
         }
         
         final City city = currentCity;
@@ -136,9 +138,24 @@ public class AirQualityActivity extends AppCompatActivity implements BottomNavig
         // 在后台线程加载数据
         executor.execute(() -> {
             try {
-                // 获取当前天气数据（包括空气质量）
-                final Weather weather = WeatherApi.getCurrentWeatherByLocation(
-                        city.getLatitude(), city.getLongitude());
+                // 使用带缓存的API获取天气数据
+                final Weather weather = WeatherApi.getCurrentWeatherByLocationWithCache(
+                        AirQualityActivity.this, city.getLatitude(), city.getLongitude());
+                
+                if (weather == null) {
+                    mainHandler.post(() -> Toast.makeText(AirQualityActivity.this, 
+                            "无可用的天气数据，请连接网络后重试", Toast.LENGTH_LONG).show());
+                    return;
+                }
+                
+                // 使用带缓存的API获取空气质量数据
+                String locationId = city.getLongitude() + "," + city.getLatitude();
+                try {
+                    WeatherApi.getAirQualityWithCache(AirQualityActivity.this, locationId, weather);
+                } catch (Exception e) {
+                    // 仅记录错误，不影响UI更新
+                    e.printStackTrace();
+                }
                 
                 // 在主线程更新UI
                 mainHandler.post(() -> updateUI(weather));
