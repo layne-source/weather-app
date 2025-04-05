@@ -270,6 +270,27 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
             final List<City> finalResults = !exactMatches.isEmpty() ? exactMatches : 
                                           !results.isEmpty() ? Collections.singletonList(results.get(0)) : 
                                           new ArrayList<>();
+                                          
+            // 加载每个搜索结果城市的天气数据
+            for (City city : finalResults) {
+                try {
+                    // 获取当前天气
+                    final com.microntek.weatherapp.model.Weather weather = 
+                            WeatherApi.getCurrentWeatherByLocation(city.getLatitude(), city.getLongitude());
+                    
+                    // 更新城市的天气信息
+                    city.setTemperature(weather.getCurrentTemp());
+                    city.setWeatherDesc(weather.getWeatherDesc());
+                    city.setWeatherIcon(weather.getWeatherIcon());
+                    
+                    // 更新空气质量信息
+                    city.setAirQuality(weather.getAirQuality());
+                    city.setAqi(weather.getAqi());
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    // 出错时继续处理其他城市
+                }
+            }
 
             runOnUiThread(() -> {
                 hideLoading();
@@ -367,6 +388,12 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
      * 添加城市
      */
     private void addCity(City city) {
+        // 检查城市数量限制
+        if (cityPreferences.getSavedCities().size() >= 5) {
+            Toast.makeText(this, "最多只能添加5个城市", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        
         // 添加城市到偏好设置
         cityPreferences.addCity(city);
         
@@ -398,6 +425,11 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
         
         cities.clear();
         cities.addAll(sortedCities);
+        
+        // 切换回城市列表界面
+        hideSearchResult();
+        
+        // 刷新适配器
         cityListAdapter.notifyDataSetChanged();
         
         // 加载新添加城市的天气
@@ -517,7 +549,12 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
                 
                 // 根据AQI值设置背景颜色
                 if (city.getAqi() > 0) {
+                    // 设置圆角背景
                     holder.tvAirQuality.setBackgroundResource(city.getAqiColorRes());
+                    // 设置背景颜色
+                    holder.tvAirQuality.getBackground().setColorFilter(
+                        getResources().getColor(city.getAqiColorValue()), 
+                        android.graphics.PorterDuff.Mode.SRC_IN);
                 }
             } else {
                 holder.tvAirQuality.setVisibility(View.GONE);
@@ -604,10 +641,42 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
                 holder.tvCityName.setText(city.getName());
             }
             
-            // 清空天气信息（搜索结果不显示天气）
-            holder.tvWeather.setText("");
-            holder.tvTemp.setText("");
-
+            // 显示天气信息（如果有）
+            if (city.getWeatherDesc() != null && !city.getWeatherDesc().isEmpty()) {
+                holder.tvWeather.setText(city.getWeatherDesc());
+                holder.tvWeather.setVisibility(View.VISIBLE);
+            } else {
+                holder.tvWeather.setVisibility(View.GONE);
+            }
+            
+            // 显示温度信息（如果有）
+            if (city.getTemperature() != 0) {
+                holder.tvTemp.setText(String.format("%d°", city.getTemperature()));
+                holder.tvTemp.setVisibility(View.VISIBLE);
+            } else {
+                holder.tvTemp.setVisibility(View.INVISIBLE);
+            }
+            
+            // 显示空气质量信息（如果有）
+            if (city.getAirQuality() != null && !city.getAirQuality().isEmpty()) {
+                // 格式：空气+质量等级+空格+AQI数值
+                String airQualityText = "空气" + city.getAirQuality() + " " + city.getAqi();
+                holder.tvAirQuality.setText(airQualityText);
+                holder.tvAirQuality.setVisibility(View.VISIBLE);
+                
+                // 根据AQI值设置背景颜色
+                if (city.getAqi() > 0) {
+                    // 设置圆角背景
+                    holder.tvAirQuality.setBackgroundResource(city.getAqiColorRes());
+                    // 设置背景颜色
+                    holder.tvAirQuality.getBackground().setColorFilter(
+                        getResources().getColor(city.getAqiColorValue()), 
+                        android.graphics.PorterDuff.Mode.SRC_IN);
+                }
+            } else {
+                holder.tvAirQuality.setVisibility(View.GONE);
+            }
+            
             // 设置点击事件
             holder.itemView.setOnClickListener(v -> {
                 // 检查是否已存在该城市
@@ -622,6 +691,13 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
                 if (cityExists) {
                     Toast.makeText(CityManagerActivity.this, 
                             "该城市已添加", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                
+                // 检查是否已达到城市数量上限
+                if (cityPreferences.getSavedCities().size() >= 5) {
+                    Toast.makeText(CityManagerActivity.this, 
+                            "最多只能添加5个城市", Toast.LENGTH_SHORT).show();
                     return;
                 }
                 

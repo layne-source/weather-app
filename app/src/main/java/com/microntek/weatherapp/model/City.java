@@ -132,10 +132,19 @@ public class City {
     }
     
     /**
+     * 获取对应AQI值的背景drawable资源ID
+     * @return drawable资源ID
+     */
+    public int getAqiColorRes() {
+        // 返回圆角背景drawable
+        return R.drawable.air_quality_tag_background;
+    }
+    
+    /**
      * 根据AQI值获取对应的背景颜色资源ID
      * @return 颜色资源ID
      */
-    public int getAqiColorRes() {
+    public int getAqiColorValue() {
         if (aqi <= 50) {
             return R.color.good_air_quality;
         } else if (aqi <= 100) {
