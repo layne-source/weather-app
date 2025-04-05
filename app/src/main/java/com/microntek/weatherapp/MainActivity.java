@@ -697,25 +697,6 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
     }
     
     @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        getMenuInflater().inflate(R.menu.main_menu, menu);
-        return true;
-    }
-    
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        if (item.getItemId() == R.id.action_refresh) {
-            refreshWeatherData();
-            return true;
-        } else if (item.getItemId() == R.id.action_settings) {
-            Intent intent = new Intent(this, com.microntek.weatherapp.ui.SettingsActivity.class);
-            startActivityForResult(intent, REQUEST_CODE_SETTINGS);
-            return true;
-        }
-        return super.onOptionsItemSelected(item);
-    }
-    
-    @Override
     protected void onDestroy() {
         super.onDestroy();
         
