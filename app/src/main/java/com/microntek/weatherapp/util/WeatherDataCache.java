@@ -2,8 +2,6 @@ package com.microntek.weatherapp.util;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.net.ConnectivityManager;
-import android.net.NetworkInfo;
 import android.os.StatFs;
 import android.text.TextUtils;
 import android.util.Log;
@@ -12,14 +10,12 @@ import android.util.LruCache;
 import com.microntek.weatherapp.model.City;
 import com.microntek.weatherapp.model.Weather;
 import com.google.gson.Gson;
-import com.google.gson.JsonParseException;
 import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
 
 import java.io.File;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -568,54 +564,6 @@ public class WeatherDataCache {
     }
     
     /**
-     * 缓存地理编码信息（城市名称）
-     */
-    public void cacheGeoInfo(String locationId, String cityName) {
-        if (TextUtils.isEmpty(cityName)) return;
-        
-        String key = KEY_PREFIX_GEO + locationId;
-        String timestampKey = KEY_PREFIX_TIMESTAMP + key;
-        
-        // 更新内存缓存
-        memoryCache.put(key, cityName);
-        
-        long timestamp = System.currentTimeMillis();
-        
-        cachePreferences.edit()
-                .putString(key, cityName)
-                .putLong(timestampKey, timestamp)
-                .apply();
-    }
-    
-    /**
-     * 获取缓存的地理编码信息
-     */
-    public String getCachedGeoInfo(String locationId) {
-        String key = KEY_PREFIX_GEO + locationId;
-        String timestampKey = KEY_PREFIX_TIMESTAMP + key;
-        
-        // 先检查内存缓存
-        Object cachedName = memoryCache.get(key);
-        if (cachedName instanceof String) {
-            long timestamp = cachePreferences.getLong(timestampKey, 0);
-            if (!isCacheExpired(timestamp, CACHE_DURATION_GEO)) {
-                return (String) cachedName;
-            }
-        }
-        
-        // 内存缓存不存在或已过期，检查磁盘缓存
-        String cityName = cachePreferences.getString(key, null);
-        long timestamp = cachePreferences.getLong(timestampKey, 0);
-        
-        if (cityName != null && !isCacheExpired(timestamp, CACHE_DURATION_GEO)) {
-            memoryCache.put(key, cityName); // 更新内存缓存
-            return cityName;
-        }
-        
-        return null;
-    }
-    
-    /**
      * 清除指定城市的所有缓存
      */
     public synchronized void clearCache(String cityId) {
@@ -722,94 +670,10 @@ public class WeatherDataCache {
     }
     
     /**
-     * 获取所有已缓存城市的ID
-     */
-    public List<String> getAllCachedCityIds() {
-        List<String> cityIds = new ArrayList<>();
-        Map<String, ?> allPrefs = cachePreferences.getAll();
-        
-        for (String key : allPrefs.keySet()) {
-            if (key.startsWith(KEY_PREFIX_CURRENT) && !key.startsWith(KEY_PREFIX_TIMESTAMP)) {
-                // 从键中提取城市ID
-                String cityId = key.substring(KEY_PREFIX_CURRENT.length());
-                cityIds.add(cityId);
-            }
-        }
-        
-        return cityIds;
-    }
-    
-    /**
-     * 获取指定城市的缓存状态
-     * @return 一个包含不同类型缓存状态的Map
-     */
-    public Map<String, Boolean> getCityCacheStatus(String cityId) {
-        Map<String, Boolean> status = new HashMap<>();
-        
-        status.put("current", isCacheValid(KEY_PREFIX_CURRENT + cityId, CACHE_DURATION_CURRENT));
-        status.put("forecast", isCacheValid(KEY_PREFIX_FORECAST + cityId, CACHE_DURATION_FORECAST));
-        status.put("air", isCacheValid(KEY_PREFIX_AIR + cityId, CACHE_DURATION_AIR));
-        status.put("indices", isCacheValid(KEY_PREFIX_INDICES + cityId, CACHE_DURATION_INDICES));
-        
-        return status;
-    }
-    
-    /**
-     * 检查网络连接状态
-     */
-    public boolean isNetworkAvailable() {
-        try {
-            ConnectivityManager connectivityManager = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
-            if (connectivityManager == null) {
-                return false;
-            }
-            
-            NetworkInfo activeNetworkInfo = connectivityManager.getActiveNetworkInfo();
-            return activeNetworkInfo != null && activeNetworkInfo.isConnected();
-        } catch (Exception e) {
-            Log.e(TAG, "检查网络状态失败: " + e.getMessage());
-            return false;
-        }
-    }
-    
-    /**
-     * 检查指定类型的缓存是否有效
-     */
-    private boolean isCacheValid(String dataKey, long duration) {
-        if (!cachePreferences.contains(dataKey)) {
-            return false;
-        }
-        
-        String timestampKey = KEY_PREFIX_TIMESTAMP + dataKey;
-        long timestamp = cachePreferences.getLong(timestampKey, 0);
-        return !isCacheExpired(timestamp, duration);
-    }
-    
-    /**
      * 检查缓存是否过期
      */
     private boolean isCacheExpired(long timestamp, long duration) {
         return System.currentTimeMillis() - timestamp > duration;
-    }
-    
-    /**
-     * 根据数据键前缀获取对应的缓存有效期
-     */
-    private long getCacheDuration(String dataKey) {
-        if (dataKey.startsWith(KEY_PREFIX_CURRENT)) {
-            return CACHE_DURATION_CURRENT;
-        } else if (dataKey.startsWith(KEY_PREFIX_FORECAST)) {
-            return CACHE_DURATION_FORECAST;
-        } else if (dataKey.startsWith(KEY_PREFIX_AIR)) {
-            return CACHE_DURATION_AIR;
-        } else if (dataKey.startsWith(KEY_PREFIX_INDICES)) {
-            return CACHE_DURATION_INDICES;
-        } else if (dataKey.startsWith(KEY_PREFIX_CITY_SEARCH)) {
-            return CACHE_DURATION_CITY_SEARCH;
-        } else if (dataKey.startsWith(KEY_PREFIX_GEO)) {
-            return CACHE_DURATION_GEO;
-        }
-        return CACHE_DURATION_CURRENT; // 默认
     }
     
     /**
@@ -1237,6 +1101,10 @@ public class WeatherDataCache {
             return CACHE_DURATION_AIR;
         } else if (key.startsWith(KEY_PREFIX_INDICES)) {
             return CACHE_DURATION_INDICES;
+        } else if (key.startsWith(KEY_PREFIX_CITY_SEARCH)) {
+            return CACHE_DURATION_CITY_SEARCH;
+        } else if (key.startsWith(KEY_PREFIX_GEO)) {
+            return CACHE_DURATION_GEO;
         } else {
             return DEFAULT_CACHE_DURATION;
         }
