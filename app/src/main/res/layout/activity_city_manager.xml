@@ -23,7 +23,9 @@
                 android:layout_height="?attr/actionBarSize"
                 android:background="@color/primary"
                 app:title="@string/city_manager"
-                app:titleTextColor="@color/white" />
+                app:titleTextColor="@color/white">
+
+            </com.google.android.material.appbar.MaterialToolbar>
         </com.google.android.material.appbar.AppBarLayout>
 
         <!-- 搜索栏 -->
@@ -53,8 +55,9 @@
     
                 <EditText
                     android:id="@+id/et_search"
-                    android:layout_width="match_parent"
+                    android:layout_width="0dp"
                     android:layout_height="40dp"
+                    android:layout_weight="1"
                     android:background="@null"
                     android:hint="@string/search_city"
                     android:imeOptions="actionSearch"
@@ -62,6 +65,17 @@
                     android:textColor="@color/primary_text"
                     android:textColorHint="@color/dark_gray"
                     android:textSize="14sp" />
+                
+                <!-- 添加清除搜索按钮 -->
+                <ImageButton
+                    android:id="@+id/btn_clear_search"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/clear_search"
+                    android:src="@android:drawable/ic_menu_close_clear_cancel"
+                    android:visibility="gone"
+                    app:tint="@color/dark_gray" />
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
@@ -79,6 +93,17 @@
                 android:layout_marginRight="10dp"
                 android:clipToPadding="false"
                 android:paddingBottom="16dp" />
+            
+            <!-- 添加无结果提示 -->
+            <TextView
+                android:id="@+id/tv_no_results"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="@string/no_search_results"
+                android:textSize="16sp"
+                android:textColor="@color/dark_gray"
+                android:visibility="gone" />
                 
             <!-- 加载中视图 -->
             <ProgressBar

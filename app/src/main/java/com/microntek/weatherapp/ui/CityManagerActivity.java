@@ -26,6 +26,8 @@ import android.widget.ImageButton;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.google.android.material.snackbar.Snackbar;
 import com.microntek.weatherapp.MainActivity;
 import com.microntek.weatherapp.R;
 import com.microntek.weatherapp.api.WeatherApi;
@@ -37,15 +39,22 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
-import com.google.android.material.bottomnavigation.BottomNavigationView;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 
 public class CityManagerActivity extends AppCompatActivity implements BottomNavigationView.OnNavigationItemSelectedListener {
+    
+    private static final String TAG = "CityManagerActivity";
     
     private RecyclerView recyclerView;
     private EditText searchEditText;
     private View loadingView;
     private com.google.android.material.bottomnavigation.BottomNavigationView bottomNavigationView;
     
+    // 添加缺失的UI组件变量
+    private TextView noResultsText;
+    private ImageButton clearSearchButton;
+
     private CityPreferences cityPreferences;
     private final Executor executor = Executors.newSingleThreadExecutor();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -55,6 +64,16 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
     private CityListAdapter cityListAdapter;
     private List<City> searchResults = new ArrayList<>();
     private SearchResultAdapter searchResultAdapter;
+    
+    // 用于后台任务处理
+    private final Executor backgroundExecutor = Executors.newCachedThreadPool();
+    
+    // 用于防止重复操作
+    private final AtomicBoolean isLoading = new AtomicBoolean(false);
+    private final AtomicBoolean isSearching = new AtomicBoolean(false);
+    
+    // 搜索模式标志
+    private boolean isSearchMode = false;
     
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -67,6 +86,10 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
         loadingView = findViewById(R.id.loading_view);
         bottomNavigationView = findViewById(R.id.bottom_navigation);
         
+        // 初始化搜索相关UI组件
+        noResultsText = findViewById(R.id.tv_no_results);
+        clearSearchButton = findViewById(R.id.btn_clear_search);
+
         // 设置工具栏
         androidx.appcompat.widget.Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
@@ -201,6 +224,9 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
         cityListAdapter = new CityListAdapter();
         recyclerView.setAdapter(cityListAdapter);
         
+        // 确保不在搜索模式
+        isSearchMode = false;
+        
         // 加载每个城市的天气数据
         loadCitiesWeather();
     }
@@ -230,6 +256,13 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
             }
             return false;
         });
+        
+        // 设置清除搜索按钮点击事件
+        clearSearchButton.setOnClickListener(v -> {
+            searchEditText.setText("");
+            hideSearchResult();
+        });
+        
     }
     
     /**
@@ -246,6 +279,8 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
             imm.hideSoftInputFromWindow(getCurrentFocus().getWindowToken(), 0);
         }
 
+        // 设置搜索模式标志
+        isSearchMode = true;
         showLoading();
 
         String finalCityName = cityName;
@@ -296,7 +331,14 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
                 hideLoading();
                 // 清空搜索框
                 searchEditText.setText("");
+                
+                // 更新搜索结果
+                searchResults.clear();
+                searchResults.addAll(finalResults);
                 searchResultAdapter.setData(finalResults);
+                
+                // 执行UI更新，包括无结果提示的显示/隐藏
+                showSearchResults();
             });
         });
     }
@@ -307,13 +349,35 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
     private void showSearchResults() {
         recyclerView.setAdapter(searchResultAdapter);
         searchResultAdapter.notifyDataSetChanged();
+        isSearchMode = true;
+        
+        // 根据搜索结果显示或隐藏无结果提示
+        if (searchResults.isEmpty()) {
+            noResultsText.setVisibility(View.VISIBLE);
+        } else {
+            noResultsText.setVisibility(View.GONE);
+        }
+        
+        // 显示清除搜索按钮
+        clearSearchButton.setVisibility(View.VISIBLE);
+        
     }
     
     /**
-     * 隐藏搜索结果，显示城市列表
+     * 隐藏搜索结果
      */
     private void hideSearchResult() {
+        isSearchMode = false;
+        searchResults.clear();
         recyclerView.setAdapter(cityListAdapter);
+        
+        // 更新适配器以显示城市列表
+        cityListAdapter.notifyDataSetChanged();
+        
+        // 隐藏结果提示和清除按钮
+        noResultsText.setVisibility(View.GONE);
+        clearSearchButton.setVisibility(View.GONE);
+        
     }
     
     /**
@@ -324,15 +388,44 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
             return;
         }
         
+        // 确保不在搜索模式
+        isSearchMode = false;
+        
+        showLoading();
+        
         // 在后台线程加载数据
         executor.execute(() -> {
             List<City> updatedCities = new ArrayList<>();
             
             for (City city : new ArrayList<>(cities)) {
                 try {
-                    // 获取当前天气
-                    final com.microntek.weatherapp.model.Weather weather = 
-                            WeatherApi.getCurrentWeatherByLocation(city.getLatitude(), city.getLongitude());
+                    // 使用缓存方式获取当前天气
+                    com.microntek.weatherapp.model.Weather weather;
+                    try {
+                        if (city.isCurrentLocation() || city.getId().contains(",")) {
+                            // 使用经纬度获取天气
+                            weather = WeatherApi.getCurrentWeatherByLocationWithCache(
+                                    getApplicationContext(), 
+                                    city.getLatitude(), 
+                                    city.getLongitude());
+                        } else {
+                            // 使用城市ID获取天气
+                            weather = WeatherApi.getCurrentWeatherWithCache(
+                                    getApplicationContext(), 
+                                    city.getId());
+                        }
+                    } catch (Exception e) {
+                        Log.e(TAG, "使用缓存获取天气失败，尝试从网络获取: " + e.getMessage());
+                        
+                        // 如果缓存获取失败，尝试直接从API获取
+                        if (city.isCurrentLocation() || city.getId().contains(",")) {
+                            weather = WeatherApi.getCurrentWeatherByLocation(
+                                    city.getLatitude(), 
+                                    city.getLongitude());
+                        } else {
+                            weather = WeatherApi.getCurrentWeather(city.getId());
+                        }
+                    }
                     
                     // 更新城市的天气信息
                     city.setTemperature(weather.getCurrentTemp());
@@ -345,7 +438,7 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
                     
                     updatedCities.add(city);
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    Log.e(TAG, "加载城市 " + city.getName() + " 的天气失败: " + e.getMessage());
                     // 出错时仍保留城市，但不更新天气
                     updatedCities.add(city);
                 }
@@ -354,6 +447,8 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
             // 在主线程更新UI
             final List<City> finalCities = updatedCities;
             mainHandler.post(() -> {
+                hideLoading();
+                
                 // 获取当前城市
                 currentCity = cityPreferences.getCurrentCity();
                 
@@ -388,114 +483,310 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
      * 添加城市
      */
     private void addCity(City city) {
-        // 检查城市数量限制
-        if (cityPreferences.getSavedCities().size() >= 5) {
-            Toast.makeText(this, "最多只能添加5个城市", Toast.LENGTH_SHORT).show();
+        // 检查输入
+        if (city == null) {
             return;
         }
         
-        // 添加城市到偏好设置
-        cityPreferences.addCity(city);
-        
-        // 刷新城市列表
-        List<City> updatedCities = cityPreferences.getSavedCities();
-        
-        // 获取当前城市
-        currentCity = cityPreferences.getCurrentCity();
-        
-        // 重新排序城市列表，将当前城市排在第一位
-        List<City> sortedCities = new ArrayList<>();
-        
-        // 首先添加当前城市
-        for (City c : updatedCities) {
-            if (currentCity != null && c.getId().equals(currentCity.getId())) {
-                c.setCurrentLocation(true);
-                sortedCities.add(c);
-                break;
-            }
+        // 防止重复添加操作
+        if (isLoading.getAndSet(true)) {
+            return;
         }
         
-        // 然后添加其他城市
-        for (City c : updatedCities) {
-            if (currentCity == null || !c.getId().equals(currentCity.getId())) {
-                c.setCurrentLocation(false);
-                sortedCities.add(c);
-            }
+        // 检查城市数量限制
+        if (cityPreferences.getSavedCities().size() >= 5) {
+            Toast.makeText(this, "最多只能添加5个城市", Toast.LENGTH_SHORT).show();
+            isLoading.set(false);
+            return;
         }
         
-        cities.clear();
-        cities.addAll(sortedCities);
+        // 显示加载状态
+        showLoading();
         
-        // 切换回城市列表界面
-        hideSearchResult();
-        
-        // 刷新适配器
-        cityListAdapter.notifyDataSetChanged();
-        
-        // 加载新添加城市的天气
-        loadCitiesWeather();
-        
-        Toast.makeText(this, "已添加城市: " + city.getName(), Toast.LENGTH_SHORT).show();
+        executor.execute(() -> {
+            try {
+                // 检查城市是否已存在
+                boolean cityExists = false;
+                for (City existingCity : cityPreferences.getSavedCities()) {
+                    if (existingCity.getId().equals(city.getId())) {
+                        cityExists = true;
+                        break;
+                    }
+                }
+                
+                if (cityExists) {
+                    mainHandler.post(() -> {
+                        hideLoading();
+                        Toast.makeText(CityManagerActivity.this, 
+                                "该城市已添加", Toast.LENGTH_SHORT).show();
+                        isLoading.set(false);
+                    });
+                    return;
+                }
+                
+                // 添加城市到偏好设置（异步预加载城市数据）
+                boolean success = cityPreferences.addCity(city);
+                
+                if (!success) {
+                    mainHandler.post(() -> {
+                        hideLoading();
+                        Toast.makeText(CityManagerActivity.this, 
+                                "添加城市失败", Toast.LENGTH_SHORT).show();
+                        isLoading.set(false);
+                    });
+                    return;
+                }
+                
+                // 刷新城市列表
+                List<City> updatedCities = cityPreferences.getSavedCities();
+                
+                // 获取当前城市
+                currentCity = cityPreferences.getCurrentCity();
+                
+                // 重新排序城市列表，将当前城市排在第一位
+                List<City> sortedCities = new ArrayList<>();
+                
+                // 首先添加当前城市
+                for (City c : updatedCities) {
+                    if (currentCity != null && c.getId().equals(currentCity.getId())) {
+                        c.setCurrentLocation(true);
+                        sortedCities.add(c);
+                        break;
+                    }
+                }
+                
+                // 然后添加其他城市
+                for (City c : updatedCities) {
+                    if (currentCity == null || !c.getId().equals(currentCity.getId())) {
+                        c.setCurrentLocation(false);
+                        sortedCities.add(c);
+                    }
+                }
+                
+                final List<City> finalSortedCities = sortedCities;
+                mainHandler.post(() -> {
+                    hideLoading();
+                    
+                    cities.clear();
+                    cities.addAll(finalSortedCities);
+                    
+                    // 切换回城市列表界面
+                    hideSearchResult();
+                    
+                    // 刷新适配器
+                    cityListAdapter.notifyDataSetChanged();
+                    
+                    Snackbar.make(
+                            findViewById(android.R.id.content), 
+                            "已添加城市: " + city.getName(), 
+                            Snackbar.LENGTH_LONG).show();
+                    
+                    isLoading.set(false);
+                });
+            } catch (Exception e) {
+                Log.e(TAG, "添加城市时出错: " + e.getMessage());
+                mainHandler.post(() -> {
+                    hideLoading();
+                    Snackbar.make(
+                            findViewById(android.R.id.content), 
+                            "添加城市失败: " + e.getMessage(), 
+                            Snackbar.LENGTH_LONG)
+                            .setAction("重试", v -> addCity(city))
+                            .show();
+                    isLoading.set(false);
+                });
+            }
+        });
     }
     
     /**
      * 删除城市
      */
     private void deleteCity(City city) {
-        // 从偏好设置中删除城市
-        cityPreferences.removeCity(city);
+        // 检查输入
+        if (city == null) {
+            return;
+        }
         
-        // 刷新城市列表
-        cities.clear();
-        cities.addAll(cityPreferences.getSavedCities());
-        cityListAdapter.notifyDataSetChanged();
+        // 防止重复删除操作
+        if (isLoading.getAndSet(true)) {
+            return;
+        }
         
-        Toast.makeText(this, "已删除城市: " + city.getName(), Toast.LENGTH_SHORT).show();
+        // 显示加载状态
+        showLoading();
+        
+        executor.execute(() -> {
+            try {
+                // 如果是当前城市，不能删除
+                if (currentCity != null && city.getId().equals(currentCity.getId())) {
+                    mainHandler.post(() -> {
+                        hideLoading();
+                        Toast.makeText(CityManagerActivity.this, 
+                                "不能删除当前选中的城市", Toast.LENGTH_SHORT).show();
+                        isLoading.set(false);
+                    });
+                    return;
+                }
+                
+                // 从偏好设置中删除城市（同时会清除相关缓存）
+                boolean success = cityPreferences.removeCity(city);
+                
+                if (!success) {
+                    mainHandler.post(() -> {
+                        hideLoading();
+                        Toast.makeText(CityManagerActivity.this, 
+                                "删除城市失败", Toast.LENGTH_SHORT).show();
+                        isLoading.set(false);
+                    });
+                    return;
+                }
+                
+                // 刷新城市列表
+                List<City> updatedCities = cityPreferences.getSavedCities();
+                
+                // 获取当前城市（可能已经更新）
+                currentCity = cityPreferences.getCurrentCity();
+                
+                final List<City> finalUpdatedCities = updatedCities;
+                mainHandler.post(() -> {
+                    hideLoading();
+                    
+                    cities.clear();
+                    cities.addAll(finalUpdatedCities);
+                    
+                    cityListAdapter.notifyDataSetChanged();
+                    
+                    Snackbar.make(
+                            findViewById(android.R.id.content), 
+                            "已删除城市: " + city.getName(), 
+                            Snackbar.LENGTH_LONG).show();
+                    
+                    isLoading.set(false);
+                });
+            } catch (Exception e) {
+                Log.e(TAG, "删除城市时出错: " + e.getMessage());
+                mainHandler.post(() -> {
+                    hideLoading();
+                    Snackbar.make(
+                            findViewById(android.R.id.content), 
+                            "删除城市失败: " + e.getMessage(), 
+                            Snackbar.LENGTH_LONG)
+                            .setAction("重试", v -> deleteCity(city))
+                            .show();
+                    isLoading.set(false);
+                });
+            }
+        });
     }
     
     /**
      * 切换当前城市，并返回主页
      */
     private void switchCurrentCity(City city) {
-        // 设置当前城市
-        cityPreferences.setCurrentCity(city);
-        currentCity = city;
-        
-        // 刷新城市列表，更新当前城市标记
-        List<City> updatedCities = cityPreferences.getSavedCities();
-        
-        // 重新排序城市列表，将当前城市排在第一位
-        List<City> sortedCities = new ArrayList<>();
-        
-        // 首先添加当前城市
-        for (City c : updatedCities) {
-            if (c.getId().equals(city.getId())) {
-                c.setCurrentLocation(true);
-                sortedCities.add(c);
-                break;
-            }
+        // 检查输入
+        if (city == null) {
+            return;
         }
         
-        // 然后添加其他城市
-        for (City c : updatedCities) {
-            if (!c.getId().equals(city.getId())) {
-                c.setCurrentLocation(false);
-                sortedCities.add(c);
-            }
+        // 防止重复切换操作
+        if (isLoading.getAndSet(true)) {
+            return;
         }
         
-        cities.clear();
-        cities.addAll(sortedCities);
-        cityListAdapter.notifyDataSetChanged();
+        // 显示加载状态
+        showLoading();
         
-        Toast.makeText(this, "已切换到城市: " + city.getName(), Toast.LENGTH_SHORT).show();
-        
-        // 返回主页并设置标志位
-        Intent intent = new Intent(this, MainActivity.class);
-        intent.putExtra("fromOtherActivity", true);
-        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        startActivity(intent);
-        finish();
+        executor.execute(() -> {
+            try {
+                // 检查是否已经是当前城市
+                City current = cityPreferences.getCurrentCity();
+                if (current != null && current.getId().equals(city.getId())) {
+                    mainHandler.post(() -> {
+                        hideLoading();
+                        Toast.makeText(CityManagerActivity.this, 
+                                city.getName() + " 已是当前城市", Toast.LENGTH_SHORT).show();
+                        isLoading.set(false);
+                    });
+                    return;
+                }
+                
+                // 设置当前城市（同时会预加载天气数据）
+                boolean success = cityPreferences.setCurrentCity(city);
+                
+                if (!success) {
+                    mainHandler.post(() -> {
+                        hideLoading();
+                        Toast.makeText(CityManagerActivity.this, 
+                                "切换城市失败", Toast.LENGTH_SHORT).show();
+                        isLoading.set(false);
+                    });
+                    return;
+                }
+                
+                currentCity = city;
+                
+                // 刷新城市列表，更新当前城市标记
+                List<City> updatedCities = cityPreferences.getSavedCities();
+                
+                // 重新排序城市列表，将当前城市排在第一位
+                List<City> sortedCities = new ArrayList<>();
+                
+                // 首先添加当前城市
+                for (City c : updatedCities) {
+                    if (c.getId().equals(city.getId())) {
+                        c.setCurrentLocation(true);
+                        sortedCities.add(c);
+                        break;
+                    }
+                }
+                
+                // 然后添加其他城市
+                for (City c : updatedCities) {
+                    if (!c.getId().equals(city.getId())) {
+                        c.setCurrentLocation(false);
+                        sortedCities.add(c);
+                    }
+                }
+                
+                mainHandler.post(() -> {
+                    hideLoading();
+                    
+                    cities.clear();
+                    cities.addAll(sortedCities);
+                    cityListAdapter.notifyDataSetChanged();
+                    
+                    Snackbar.make(
+                            findViewById(android.R.id.content), 
+                            "已切换到城市: " + city.getName(), 
+                            Snackbar.LENGTH_SHORT).show();
+                    
+                    // 延迟500ms，让用户看到切换成功的提示
+                    new Handler().postDelayed(() -> {
+                        // 返回主页并设置标志位
+                        Intent intent = new Intent(CityManagerActivity.this, MainActivity.class);
+                        intent.putExtra("fromOtherActivity", true);
+                        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                        startActivity(intent);
+                        finish();
+                    }, 500);
+                    
+                    isLoading.set(false);
+                });
+            } catch (Exception e) {
+                Log.e(TAG, "切换城市时出错: " + e.getMessage());
+                mainHandler.post(() -> {
+                    hideLoading();
+                    Snackbar.make(
+                            findViewById(android.R.id.content), 
+                            "切换城市失败: " + e.getMessage(), 
+                            Snackbar.LENGTH_LONG)
+                            .setAction("重试", v -> switchCurrentCity(city))
+                            .show();
+                    isLoading.set(false);
+                });
+            }
+        });
     }
     
     /**
@@ -712,7 +1003,7 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
         }
 
         void setData(List<City> results) {
-            searchResults = results;
+            // 不再在这里直接修改searchResults，因为在调用前已经更新
             notifyDataSetChanged();
         }
     }
@@ -738,8 +1029,17 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
         if (loadingView != null) {
             loadingView.setVisibility(View.GONE);
         }
-        // 显示搜索结果
-        showSearchResults();
+        
+        // 只有在搜索模式下才显示搜索结果
+        if (isSearchMode) {
+            showSearchResults();
+        } else {
+            // 确保城市列表显示
+            if (recyclerView.getAdapter() != cityListAdapter) {
+                recyclerView.setAdapter(cityListAdapter);
+                cityListAdapter.notifyDataSetChanged();
+            }
+        }
     }
 
     @Override
@@ -769,5 +1069,25 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
             // 点击搜索结果中的城市，添加到保存列表
             addCity(city);
         }
+    }
+
+    @Override
+    protected void onDestroy() {
+        // 清理资源
+        if (cityPreferences != null) {
+            cityPreferences.onDestroy();
+        }
+        
+        // 取消所有后台任务
+        if (executor instanceof java.util.concurrent.ExecutorService) {
+            try {
+                ((java.util.concurrent.ExecutorService) executor).shutdown();
+                Log.i(TAG, "已关闭后台任务执行器");
+            } catch (Exception e) {
+                Log.e(TAG, "关闭执行器失败: " + e.getMessage());
+            }
+        }
+        
+        super.onDestroy();
     }
 } 

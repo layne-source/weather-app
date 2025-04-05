@@ -688,29 +688,59 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
     @Override
     protected void onResume() {
         super.onResume();
-        // 每次回到页面时重新加载数据
-        loadWeatherData();
         
-        // 重置底部导航栏选中状态为首页
-        bottomNavigationView.setSelectedItemId(R.id.navigation_home);
+        // 设置底部导航选中状态为首页
+        if (bottomNavigationView != null) {
+            bottomNavigationView.setSelectedItemId(R.id.navigation_home);
+        }
+        
+        // 同步所有城市的缓存数据
+        if (cityPreferences != null && !swipeRefreshLayout.isRefreshing()) {
+            executor.execute(() -> {
+                try {
+                    // 首先同步当前城市
+                    City currentCity = cityPreferences.getCurrentCity();
+                    if (currentCity != null) {
+                        // 预加载并更新当前城市的数据
+                        cityPreferences.preloadCityWeatherData(currentCity, true);
+                    }
+                    
+                    // 然后同步所有城市
+                    cityPreferences.synchronizeAllCitiesCache();
+                    
+                    // 如果是从其他Activity返回，刷新天气数据UI
+                    boolean fromOtherActivity = getIntent().getBooleanExtra("fromOtherActivity", false);
+                    if (fromOtherActivity) {
+                        // 清除标记，避免多次刷新
+                        getIntent().removeExtra("fromOtherActivity");
+                        
+                        // 在主线程更新UI
+                        mainHandler.post(this::loadWeatherData);
+                    }
+                } catch (Exception e) {
+                    Log.e("MainActivity", "同步城市缓存时出错: " + e.getMessage());
+                }
+            });
+        }
     }
     
     @Override
     protected void onDestroy() {
-        super.onDestroy();
+        // 清理资源
+        if (cityPreferences != null) {
+            cityPreferences.onDestroy();
+        }
         
-        // 关闭executor防止资源泄漏
-        if (!isChangingConfigurations()) {
-            // 只有在应用完全退出时才关闭资源，避免因旋转屏幕等配置变化导致的临时销毁
+        // 关闭线程池
+        if (executor instanceof ExecutorService) {
             try {
-                if (executor instanceof ExecutorService) {
-                    ((ExecutorService) executor).shutdown();
-                }
-                // 关闭全局缓存管理器
-                WeatherDataCache.shutdown();
+                ((ExecutorService) executor).shutdown();
+                Log.i("MainActivity", "已关闭主线程池");
             } catch (Exception e) {
-                Log.e("MainActivity", "关闭资源失败: " + e.getMessage());
+                Log.e("MainActivity", "关闭线程池出错: " + e.getMessage());
             }
         }
+        
+        super.onDestroy();
     }
 } 
