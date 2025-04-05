@@ -182,14 +182,8 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
         List<City> savedCities = cityPreferences.getSavedCities();
         cities.clear();
         
-        // 如果没有保存的城市，添加默认城市（北京）
-        if (savedCities.isEmpty()) {
-            City beijing = new City("北京", "39.9042,116.4074", "北京市", 39.9042, 116.4074);
-            beijing.setCurrentLocation(true);
-            savedCities.add(beijing);
-            cityPreferences.addCity(beijing);
-            cityPreferences.setCurrentCity(beijing);
-        }
+        // 删除自动添加北京的逻辑，保留现有城市
+        cities.addAll(savedCities);
         
         // 获取当前城市
         currentCity = cityPreferences.getCurrentCity();
@@ -214,6 +208,7 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
             }
         }
         
+        cities.clear();
         cities.addAll(sortedCities);
         
         // 设置适配器
@@ -223,8 +218,11 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
         // 确保不在搜索模式
         isSearchMode = false;
         
-        // 加载每个城市的天气数据
-        loadCitiesWeather();
+        // 如果城市列表为空，显示提示信息；否则不处理
+        if (!cities.isEmpty()) {
+            // 加载每个城市的天气数据
+            loadCitiesWeather();
+        }
     }
     
     /**
@@ -490,6 +488,9 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
                     return;
                 }
                 
+                // 检查是否是第一个城市
+                boolean isFirstCity = cityPreferences.getSavedCities().isEmpty();
+                
                 // 添加城市到偏好设置（异步预加载城市数据）
                 boolean success = cityPreferences.addCity(city);
                 
@@ -501,6 +502,12 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
                         com.microntek.weatherapp.util.TaskManager.completeTask(taskId);
                     });
                     return;
+                }
+                
+                // 如果是第一个城市，自动设置为当前城市
+                if (isFirstCity) {
+                    cityPreferences.setCurrentCity(city);
+                    currentCity = city;
                 }
                 
                 // 获取并排序城市列表
@@ -517,13 +524,24 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
                     // 切换回城市列表界面
                     hideSearchResult();
                     
+                    // 清空搜索框
+                    searchEditText.setText("");
+                    
                     // 刷新适配器
                     cityListAdapter.notifyDataSetChanged();
                     
-                    Snackbar.make(
-                            findViewById(android.R.id.content), 
-                            "已添加城市: " + city.getName(), 
-                            Snackbar.LENGTH_LONG).show();
+                    // 根据是否是第一个城市显示不同的提示
+                    if (isFirstCity) {
+                        Snackbar.make(
+                                findViewById(android.R.id.content), 
+                                "已添加城市: " + city.getName() + "，并设为当前城市", 
+                                Snackbar.LENGTH_LONG).show();
+                    } else {
+                        Snackbar.make(
+                                findViewById(android.R.id.content), 
+                                "已添加城市: " + city.getName(), 
+                                Snackbar.LENGTH_LONG).show();
+                    }
                     
                     com.microntek.weatherapp.util.TaskManager.completeTask(taskId);
                 });
@@ -1010,5 +1028,27 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
         }
         
         super.onDestroy();
+    }
+
+    @Override
+    public void onBackPressed() {
+        // 检查当前是否在搜索模式
+        if (isSearchMode) {
+            // 如果在搜索模式，先返回到城市列表
+            hideSearchResult();
+            searchEditText.setText("");
+        } else {
+            // 检查是否有保存的城市
+            if (cityPreferences.getSavedCities().isEmpty()) {
+                // 如果没有城市，直接退出应用
+                Intent intent = new Intent(Intent.ACTION_MAIN);
+                intent.addCategory(Intent.CATEGORY_HOME);
+                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(intent);
+            } else {
+                // 有城市，正常处理返回行为
+                super.onBackPressed();
+            }
+        }
     }
 } 
