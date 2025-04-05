@@ -3,11 +3,15 @@ package com.microntek.weatherapp;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.View;
@@ -24,6 +28,7 @@ import com.microntek.weatherapp.util.AirPollutionUtil;
 import com.microntek.weatherapp.util.CityPreferences;
 import com.microntek.weatherapp.util.WeatherBackgroundUtil;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import org.json.JSONException;
 
@@ -50,6 +55,10 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
     private TextView tvSunrise;
     private TextView tvSunset;
     private BottomNavigationView bottomNavigationView;
+    
+    // 添加新的UI组件
+    private TextView tvUpdateTime;
+    private SwipeRefreshLayout swipeRefreshLayout;
     
     // 数据处理
     private CityPreferences cityPreferences;
@@ -82,6 +91,10 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
         
         // 设置底部导航栏
         bottomNavigationView.setOnNavigationItemSelectedListener(this);
+        
+        // 设置下拉刷新
+        swipeRefreshLayout.setOnRefreshListener(this::refreshWeatherData);
+        swipeRefreshLayout.setColorSchemeResources(R.color.colorPrimary);
         
         // 加载天气数据
         loadWeatherData();
@@ -125,36 +138,58 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
         
         bottomNavigationView = findViewById(R.id.bottom_navigation);
         
+        // 初始化新组件
+        tvUpdateTime = findViewById(R.id.tv_update_time);
+        swipeRefreshLayout = findViewById(R.id.swipe_refresh_layout);
+        
         // 设置点击事件
         tvCityName.setOnClickListener(v -> navigateToCityManager());
     }
     
     /**
      * 加载天气数据
+     * @param refreshInBackground 是否在后台执行刷新操作
      */
-    private void loadWeatherData() {
-        // 获取当前选中的城市
+    private void loadWeatherData(boolean refreshInBackground) {
         City currentCity = cityPreferences.getCurrentCity();
-        
         if (currentCity == null) {
-            // 如果没有选中的城市，使用默认城市（北京）
-            currentCity = new City("北京", "39.9042,116.4074", "北京市", 39.9042, 116.4074);
-            cityPreferences.setCurrentCity(currentCity);
+            // 如果没有当前城市，显示提示并跳转到城市管理页面
+            Toast.makeText(this, "请先添加城市", Toast.LENGTH_SHORT).show();
+            navigateToCityManager();
+            return;
         }
         
         final City city = currentCity;
         tvCityName.setText(city.getName());
         
+        // 检查是否离线模式
+        boolean isOffline = !isNetworkAvailable();
+        if (isOffline) {
+            // 显示离线模式提示
+            Toast.makeText(this, "网络连接不可用，显示缓存数据", Toast.LENGTH_SHORT).show();
+        }
+        
         // 在后台线程加载数据
         executor.execute(() -> {
             try {
-                // 获取当前天气
-                final Weather currentWeather = WeatherApi.getCurrentWeatherByLocation(
-                        city.getLatitude(), city.getLongitude());
+                // 使用带缓存的API获取天气数据
+                final Weather currentWeather = WeatherApi.getCurrentWeatherByLocationWithCache(
+                        MainActivity.this, city.getLatitude(), city.getLongitude());
                 
-                // 获取天气预报 - 使用经纬度而不是ID
-                final Weather forecastWeather = WeatherApi.getForecastByLocation(
-                        city.getLatitude(), city.getLongitude());
+                if (currentWeather == null) {
+                    mainHandler.post(() -> {
+                        Toast.makeText(MainActivity.this, 
+                                "无可用的天气数据，请连接网络后重试", Toast.LENGTH_LONG).show();
+                        if (swipeRefreshLayout.isRefreshing()) {
+                            swipeRefreshLayout.setRefreshing(false);
+                        }
+                    });
+                    return;
+                }
+                
+                // 获取天气预报 - 使用带缓存的API
+                final Weather forecastWeather = WeatherApi.getForecastByLocationWithCache(
+                        MainActivity.this, city.getLatitude(), city.getLongitude());
                 
                 // 合并天气预报数据到当前天气对象
                 if (forecastWeather != null && forecastWeather.getDailyForecasts() != null) {
@@ -182,14 +217,132 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
                     }
                 }
                 
+                // 尝试从缓存获取空气质量数据
+                String locationId = city.getLongitude() + "," + city.getLatitude();
+                try {
+                    WeatherApi.getAirQualityWithCache(MainActivity.this, locationId, currentWeather);
+                } catch (Exception e) {
+                    Log.e("MainActivity", "获取空气质量数据失败: " + e.getMessage());
+                }
+                
+                // 尝试从缓存获取生活指数数据
+                try {
+                    WeatherApi.getLifeIndicesWithCache(MainActivity.this, locationId, currentWeather);
+                } catch (Exception e) {
+                    Log.e("MainActivity", "获取生活指数数据失败: " + e.getMessage());
+                }
+                
                 // 在主线程更新UI
-                mainHandler.post(() -> updateUI(currentWeather));
+                mainHandler.post(() -> {
+                    updateUI(currentWeather);
+                    
+                    // 如果是下拉刷新，停止刷新动画
+                    if (swipeRefreshLayout.isRefreshing()) {
+                        swipeRefreshLayout.setRefreshing(false);
+                    }
+                    
+                    // 如果不是离线模式且需要后台刷新，在后台刷新数据
+                    if (!isOffline && refreshInBackground) {
+                        refreshWeatherDataInBackground(city);
+                    }
+                });
             } catch (IOException | JSONException e) {
                 e.printStackTrace();
-                mainHandler.post(() -> Toast.makeText(MainActivity.this, 
-                        "数据加载失败: " + e.getMessage(), Toast.LENGTH_LONG).show());
+                mainHandler.post(() -> {
+                    Toast.makeText(MainActivity.this, 
+                            "数据加载失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                    
+                    // 如果是下拉刷新，停止刷新动画
+                    if (swipeRefreshLayout.isRefreshing()) {
+                        swipeRefreshLayout.setRefreshing(false);
+                    }
+                });
             }
         });
+    }
+    
+    /**
+     * 加载天气数据（默认启用后台刷新）
+     */
+    private void loadWeatherData() {
+        loadWeatherData(true);
+    }
+    
+    /**
+     * 在后台刷新天气数据
+     */
+    private void refreshWeatherDataInBackground(City city) {
+        executor.execute(() -> {
+            try {
+                // 从API获取最新数据并更新缓存
+                WeatherApi.refreshWeatherDataByLocation(
+                        MainActivity.this, city.getLatitude(), city.getLongitude());
+                
+                // 在主线程中重新加载更新后的数据，但不再触发后台刷新
+                mainHandler.post(() -> {
+                    loadWeatherData(false);
+                });
+            } catch (IOException | JSONException e) {
+                // 仅记录错误，不向用户显示（因为已经显示了缓存数据）
+                Log.e("MainActivity", "后台刷新天气数据失败: " + e.getMessage());
+            }
+        });
+    }
+    
+    /**
+     * 手动刷新天气数据
+     */
+    private void refreshWeatherData() {
+        City currentCity = cityPreferences.getCurrentCity();
+        if (currentCity == null) {
+            swipeRefreshLayout.setRefreshing(false);
+            return;
+        }
+        
+        // 检查网络连接
+        if (!isNetworkAvailable()) {
+            Toast.makeText(this, "网络连接不可用，无法刷新数据", Toast.LENGTH_SHORT).show();
+            swipeRefreshLayout.setRefreshing(false);
+            return;
+        }
+        
+        executor.execute(() -> {
+            try {
+                // 忽略缓存，直接从API获取最新数据
+                final Weather updatedWeather = WeatherApi.refreshWeatherDataByLocation(
+                        MainActivity.this, currentCity.getLatitude(), currentCity.getLongitude());
+                
+                mainHandler.post(() -> {
+                    if (updatedWeather != null) {
+                        // 加载更新后的数据，但不触发后台刷新
+                        loadWeatherData(false);
+                        Toast.makeText(MainActivity.this, "天气数据已更新", Toast.LENGTH_SHORT).show();
+                    } else {
+                        Toast.makeText(MainActivity.this, "更新失败，请稍后重试", Toast.LENGTH_SHORT).show();
+                        swipeRefreshLayout.setRefreshing(false);
+                    }
+                });
+            } catch (IOException | JSONException e) {
+                e.printStackTrace();
+                mainHandler.post(() -> {
+                    swipeRefreshLayout.setRefreshing(false);
+                    Toast.makeText(MainActivity.this, 
+                            "刷新失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                });
+            }
+        });
+    }
+    
+    /**
+     * 检查网络连接状态
+     */
+    private boolean isNetworkAvailable() {
+        ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (connectivityManager != null) {
+            NetworkInfo activeNetworkInfo = connectivityManager.getActiveNetworkInfo();
+            return activeNetworkInfo != null && activeNetworkInfo.isConnected();
+        }
+        return false;
     }
     
     /**
@@ -234,6 +387,11 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
         
         // 更新天气预报
         updateForecast(weather.getDailyForecasts());
+        
+        // 更新时间显示
+        if (tvUpdateTime != null && weather.getUpdateTimestamp() > 0) {
+            tvUpdateTime.setText("更新时间: " + weather.getUpdateTimeString());
+        }
     }
     
     /**

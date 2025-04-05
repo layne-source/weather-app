@@ -1,8 +1,12 @@
 package com.microntek.weatherapp.api;
 
+import android.content.Context;
+import android.util.Log;
+
 import com.microntek.weatherapp.R;
 import com.microntek.weatherapp.model.City;
 import com.microntek.weatherapp.model.Weather;
+import com.microntek.weatherapp.util.WeatherDataCache;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -34,6 +38,18 @@ public class WeatherApi {
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(10, TimeUnit.SECONDS)
             .build();
+
+    // 缓存管理器实例
+    private static WeatherDataCache weatherDataCache;
+    
+    /**
+     * 初始化缓存管理器
+     */
+    public static void initCache(Context context) {
+        if (weatherDataCache == null) {
+            weatherDataCache = WeatherDataCache.getInstance(context);
+        }
+    }
 
     /**
      * 根据城市ID获取当前天气
@@ -707,5 +723,340 @@ public class WeatherApi {
             default:
                 return "❓";
         }
+    }
+
+    /**
+     * 根据城市ID获取当前天气（带缓存）
+     */
+    public static Weather getCurrentWeatherWithCache(Context context, String cityId) 
+            throws IOException, JSONException {
+        
+        initCache(context);
+        
+        // 先尝试从缓存获取
+        Weather cachedWeather = weatherDataCache.getCachedCurrentWeather(cityId);
+        if (cachedWeather != null) {
+            return cachedWeather;
+        }
+        
+        // 缓存不存在或已过期，从API获取
+        Weather weather = getCurrentWeather(cityId);
+        
+        // 保存到缓存
+        if (weather != null) {
+            weatherDataCache.cacheCurrentWeather(cityId, weather);
+        }
+        
+        return weather;
+    }
+    
+    /**
+     * 根据经纬度获取当前天气（带缓存）
+     */
+    public static Weather getCurrentWeatherByLocationWithCache(Context context, double lat, double lon) 
+            throws IOException, JSONException {
+        
+        initCache(context);
+        
+        String locationId = lon + "," + lat; // 和风天气API使用经度,纬度格式
+        
+        // 先尝试从缓存获取
+        Weather cachedWeather = weatherDataCache.getCachedCurrentWeather(locationId);
+        if (cachedWeather != null) {
+            return cachedWeather;
+        }
+        
+        // 缓存不存在或已过期，从API获取
+        Weather weather = getCurrentWeatherByLocation(lat, lon);
+        
+        // 保存到缓存
+        if (weather != null) {
+            weatherDataCache.cacheCurrentWeather(locationId, weather);
+        }
+        
+        return weather;
+    }
+    
+    /**
+     * 获取7天天气预报（带缓存）
+     */
+    public static Weather getForecastWithCache(Context context, String cityId) 
+            throws IOException, JSONException {
+        
+        initCache(context);
+        
+        // 先尝试从缓存获取
+        Weather cachedWeather = weatherDataCache.getCachedForecastWeather(cityId);
+        if (cachedWeather != null) {
+            return cachedWeather;
+        }
+        
+        // 缓存不存在或已过期，从API获取
+        Weather weather = getForecast(cityId);
+        
+        // 保存到缓存
+        if (weather != null) {
+            weatherDataCache.cacheForecastWeather(cityId, weather);
+        }
+        
+        return weather;
+    }
+    
+    /**
+     * 根据经纬度获取7天天气预报（带缓存）
+     */
+    public static Weather getForecastByLocationWithCache(Context context, double lat, double lon) 
+            throws IOException, JSONException {
+        
+        initCache(context);
+        
+        String locationId = lon + "," + lat;
+        
+        // 先尝试从缓存获取
+        Weather cachedWeather = weatherDataCache.getCachedForecastWeather(locationId);
+        if (cachedWeather != null) {
+            return cachedWeather;
+        }
+        
+        // 缓存不存在或已过期，从API获取
+        Weather weather = getForecastByLocation(lat, lon);
+        
+        // 保存到缓存
+        if (weather != null) {
+            weatherDataCache.cacheForecastWeather(locationId, weather);
+        }
+        
+        return weather;
+    }
+    
+    /**
+     * 获取空气质量（带缓存）
+     */
+    public static Weather getAirQualityWithCache(Context context, String cityId, Weather weather) 
+            throws IOException, JSONException {
+        
+        initCache(context);
+        
+        // 先尝试从缓存获取
+        Weather cachedAir = weatherDataCache.getCachedAirQuality(cityId);
+        if (cachedAir != null) {
+            // 将缓存的空气质量数据合并到当前天气对象
+            weather.setAirQuality(cachedAir.getAirQuality());
+            weather.setAqi(cachedAir.getAqi());
+            weather.setPm25(cachedAir.getPm25());
+            weather.setPm10(cachedAir.getPm10());
+            weather.setCo(cachedAir.getCo());
+            weather.setSo2(cachedAir.getSo2());
+            weather.setNo2(cachedAir.getNo2());
+            weather.setO3(cachedAir.getO3());
+            return weather;
+        }
+        
+        // 缓存不存在或已过期，从API获取
+        Weather updatedWeather = getAirQuality(cityId, weather);
+        
+        // 保存到缓存
+        if (updatedWeather != null) {
+            weatherDataCache.cacheAirQuality(cityId, updatedWeather);
+        }
+        
+        return updatedWeather;
+    }
+    
+    /**
+     * 获取生活指数（带缓存）
+     */
+    public static Weather getLifeIndicesWithCache(Context context, String cityId, Weather weather) 
+            throws IOException, JSONException {
+        
+        initCache(context);
+        
+        // 先尝试从缓存获取
+        Weather cachedIndices = weatherDataCache.getCachedLifeIndices(cityId);
+        if (cachedIndices != null) {
+            // 将缓存的生活指数数据合并到当前天气对象
+            mergeIndicesData(weather, cachedIndices);
+            return weather;
+        }
+        
+        // 缓存不存在或已过期，从API获取
+        Weather updatedWeather = getLifeIndices(cityId, weather);
+        
+        // 保存到缓存
+        if (updatedWeather != null) {
+            weatherDataCache.cacheLifeIndices(cityId, updatedWeather);
+        }
+        
+        return updatedWeather;
+    }
+    
+    /**
+     * 合并生活指数数据到天气对象
+     */
+    private static void mergeIndicesData(Weather target, Weather source) {
+        target.setClothesIndex(source.getClothesIndex());
+        target.setClothesCategory(source.getClothesCategory());
+        target.setSportIndex(source.getSportIndex());
+        target.setSportCategory(source.getSportCategory());
+        target.setUvIndex(source.getUvIndex());
+        target.setUvCategory(source.getUvCategory());
+        target.setWashCarIndex(source.getWashCarIndex());
+        target.setWashCarCategory(source.getWashCarCategory());
+        target.setTravelIndex(source.getTravelIndex());
+        target.setTravelCategory(source.getTravelCategory());
+        target.setComfortIndex(source.getComfortIndex());
+        target.setComfortCategory(source.getComfortCategory());
+        target.setAirPollutionIndex(source.getAirPollutionIndex());
+        target.setAirPollutionCategory(source.getAirPollutionCategory());
+        target.setTrafficIndex(source.getTrafficIndex());
+        target.setTrafficCategory(source.getTrafficCategory());
+        target.setFluIndex(source.getFluIndex());
+        target.setFluCategory(source.getFluCategory());
+    }
+    
+    /**
+     * 合并天气数据（将天气预报数据合并到当前天气）
+     */
+    private static void mergeWeatherData(Weather target, Weather source) {
+        // 更新当天的最高最低温度
+        target.setHighTemp(source.getHighTemp());
+        target.setLowTemp(source.getLowTemp());
+        
+        // 如果预报中的日出日落时间存在，也更新它们
+        if (source.getSunrise() != null && !source.getSunrise().isEmpty()) {
+            target.setSunrise(source.getSunrise());
+        }
+        if (source.getSunset() != null && !source.getSunset().isEmpty()) {
+            target.setSunset(source.getSunset());
+        }
+        
+        // 更新预报列表
+        target.setDailyForecasts(source.getDailyForecasts());
+        
+        // 如果当天预报数据中有更详细的天气描述，也可以更新
+        if (source.getDailyForecasts() != null && source.getDailyForecasts().size() > 0) {
+            Weather.DailyForecast todayForecast = source.getDailyForecasts().get(0);
+            if (target.getWeatherDesc() == null || target.getWeatherDesc().isEmpty()) {
+                target.setWeatherDesc(todayForecast.getWeatherDesc());
+            }
+        }
+    }
+    
+    /**
+     * 搜索城市（带缓存）
+     */
+    public static List<City> searchCityWithCache(Context context, String cityName) 
+            throws IOException, JSONException {
+        
+        initCache(context);
+        
+        // 先尝试从缓存获取
+        List<City> cachedCities = weatherDataCache.getCachedCitySearchResult(cityName);
+        if (cachedCities != null) {
+            return cachedCities;
+        }
+        
+        // 缓存不存在或已过期，从API获取
+        List<City> cities = searchCity(cityName);
+        
+        // 保存到缓存
+        if (cities != null && !cities.isEmpty()) {
+            weatherDataCache.cacheCitySearchResult(cityName, cities);
+        }
+        
+        return cities;
+    }
+    
+    /**
+     * 刷新天气数据（忽略缓存）
+     */
+    public static Weather refreshWeatherData(Context context, String cityId) 
+            throws IOException, JSONException {
+        
+        initCache(context);
+        
+        // 从API获取最新数据
+        Weather currentWeather = getCurrentWeather(cityId);
+        
+        if (currentWeather != null) {
+            // 获取并合并天气预报
+            try {
+                Weather forecastWeather = getForecast(cityId);
+                if (forecastWeather != null) {
+                    mergeWeatherData(currentWeather, forecastWeather);
+                    weatherDataCache.cacheForecastWeather(cityId, forecastWeather);
+                }
+            } catch (Exception e) {
+                Log.e("WeatherApi", "获取天气预报失败: " + e.getMessage());
+            }
+            
+            // 获取并合并空气质量
+            try {
+                currentWeather = getAirQuality(cityId, currentWeather);
+                weatherDataCache.cacheAirQuality(cityId, currentWeather);
+            } catch (Exception e) {
+                Log.e("WeatherApi", "获取空气质量失败: " + e.getMessage());
+            }
+            
+            // 获取并合并生活指数
+            try {
+                currentWeather = getLifeIndices(cityId, currentWeather);
+                weatherDataCache.cacheLifeIndices(cityId, currentWeather);
+            } catch (Exception e) {
+                Log.e("WeatherApi", "获取生活指数失败: " + e.getMessage());
+            }
+            
+            // 保存当前天气到缓存
+            weatherDataCache.cacheCurrentWeather(cityId, currentWeather);
+        }
+        
+        return currentWeather;
+    }
+    
+    /**
+     * 根据经纬度刷新天气数据（忽略缓存）
+     */
+    public static Weather refreshWeatherDataByLocation(Context context, double lat, double lon) 
+            throws IOException, JSONException {
+        
+        initCache(context);
+        String locationId = lon + "," + lat;
+        
+        // 从API获取最新数据
+        Weather currentWeather = getCurrentWeatherByLocation(lat, lon);
+        
+        if (currentWeather != null) {
+            // 获取并合并天气预报
+            try {
+                Weather forecastWeather = getForecastByLocation(lat, lon);
+                if (forecastWeather != null) {
+                    mergeWeatherData(currentWeather, forecastWeather);
+                    weatherDataCache.cacheForecastWeather(locationId, forecastWeather);
+                }
+            } catch (Exception e) {
+                Log.e("WeatherApi", "获取天气预报失败: " + e.getMessage());
+            }
+            
+            // 获取并合并空气质量
+            try {
+                currentWeather = getAirQuality(locationId, currentWeather);
+                weatherDataCache.cacheAirQuality(locationId, currentWeather);
+            } catch (Exception e) {
+                Log.e("WeatherApi", "获取空气质量失败: " + e.getMessage());
+            }
+            
+            // 获取并合并生活指数
+            try {
+                currentWeather = getLifeIndices(locationId, currentWeather);
+                weatherDataCache.cacheLifeIndices(locationId, currentWeather);
+            } catch (Exception e) {
+                Log.e("WeatherApi", "获取生活指数失败: " + e.getMessage());
+            }
+            
+            // 保存当前天气到缓存
+            weatherDataCache.cacheCurrentWeather(locationId, currentWeather);
+        }
+        
+        return currentWeather;
     }
 } 

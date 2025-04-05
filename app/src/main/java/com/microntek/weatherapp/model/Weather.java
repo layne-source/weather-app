@@ -59,6 +59,9 @@ public class Weather {
     // 天气预报
     private List<DailyForecast> dailyForecasts;
     
+    // 新增：时间戳字段
+    private long updateTimestamp;
+    
     // Getter和Setter方法
     public String getCityName() {
         return cityName;
@@ -370,6 +373,26 @@ public class Weather {
     
     public void setDailyForecasts(List<DailyForecast> dailyForecasts) {
         this.dailyForecasts = dailyForecasts;
+    }
+    
+    public long getUpdateTimestamp() {
+        return updateTimestamp;
+    }
+    
+    public void setUpdateTimestamp(long updateTimestamp) {
+        this.updateTimestamp = updateTimestamp;
+    }
+    
+    /**
+     * 获取格式化的更新时间字符串
+     */
+    public String getUpdateTimeString() {
+        if (updateTimestamp == 0) {
+            return "未知时间";
+        }
+        
+        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault());
+        return sdf.format(new java.util.Date(updateTimestamp));
     }
     
     /**
