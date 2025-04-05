@@ -33,6 +33,9 @@ import com.microntek.weatherapp.R;
 import com.microntek.weatherapp.api.WeatherApi;
 import com.microntek.weatherapp.model.City;
 import com.microntek.weatherapp.util.CityPreferences;
+import com.microntek.weatherapp.util.WeatherDataHelper;
+import com.microntek.weatherapp.util.ExecutorManager;
+import com.microntek.weatherapp.util.TaskManager;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -46,6 +49,11 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
     
     private static final String TAG = "CityManagerActivity";
     
+    // 城市数据
+    private List<City> cities = new ArrayList<>();
+    private City currentCity;
+    
+    // UI组件
     private RecyclerView recyclerView;
     private EditText searchEditText;
     private View loadingView;
@@ -56,21 +64,9 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
     private ImageButton clearSearchButton;
 
     private CityPreferences cityPreferences;
-    private final Executor executor = Executors.newSingleThreadExecutor();
-    private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    
-    private City currentCity;
-    private List<City> cities = new ArrayList<>();
     private CityListAdapter cityListAdapter;
     private List<City> searchResults = new ArrayList<>();
     private SearchResultAdapter searchResultAdapter;
-    
-    // 用于后台任务处理
-    private final Executor backgroundExecutor = Executors.newCachedThreadPool();
-    
-    // 用于防止重复操作
-    private final AtomicBoolean isLoading = new AtomicBoolean(false);
-    private final AtomicBoolean isSearching = new AtomicBoolean(false);
     
     // 搜索模式标志
     private boolean isSearchMode = false;
@@ -283,19 +279,30 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
         isSearchMode = true;
         showLoading();
 
-        String finalCityName = cityName;
-        executor.execute(() -> {
+        // 使用TaskManager执行搜索任务
+        final String taskId = "SEARCH_CITY_" + cityName;
+        com.microntek.weatherapp.util.TaskManager.executeParallelTask(taskId, () -> {
             List<City> results = new ArrayList<>();
             try {
-                results = WeatherApi.searchCity(finalCityName);
+                results = WeatherApi.searchCity(cityName);
             } catch (Exception e) {
                 e.printStackTrace();
+                com.microntek.weatherapp.util.ExecutorManager.executeOnMain(() -> {
+                    hideLoading();
+                    Snackbar.make(
+                            findViewById(android.R.id.content),
+                            "搜索城市失败: " + e.getMessage(),
+                            Snackbar.LENGTH_LONG)
+                            .setAction("重试", v -> searchCity(cityName))
+                            .show();
+                });
+                return;
             }
 
             List<City> exactMatches = new ArrayList<>();
             // 精确匹配城市名
             for (City city : results) {
-                if (city.getName().equals(finalCityName)) {
+                if (city.getName().equals(cityName)) {
                     exactMatches.add(city);
                     break;
                 }
@@ -305,41 +312,49 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
             final List<City> finalResults = !exactMatches.isEmpty() ? exactMatches : 
                                           !results.isEmpty() ? Collections.singletonList(results.get(0)) : 
                                           new ArrayList<>();
-                                          
-            // 加载每个搜索结果城市的天气数据
-            for (City city : finalResults) {
-                try {
-                    // 获取当前天气
-                    final com.microntek.weatherapp.model.Weather weather = 
-                            WeatherApi.getCurrentWeatherByLocation(city.getLatitude(), city.getLongitude());
-                    
-                    // 更新城市的天气信息
-                    city.setTemperature(weather.getCurrentTemp());
-                    city.setWeatherDesc(weather.getWeatherDesc());
-                    city.setWeatherIcon(weather.getWeatherIcon());
-                    
-                    // 更新空气质量信息
-                    city.setAirQuality(weather.getAirQuality());
-                    city.setAqi(weather.getAqi());
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    // 出错时继续处理其他城市
-                }
+            
+            if (finalResults.isEmpty()) {
+                com.microntek.weatherapp.util.ExecutorManager.executeOnMain(() -> {
+                    hideLoading();
+                    // 更新搜索结果
+                    searchResults.clear();
+                    searchResultAdapter.notifyDataSetChanged();
+                    showSearchResults();
+                });
+                return;
             }
-
-            runOnUiThread(() -> {
-                hideLoading();
-                // 清空搜索框
-                searchEditText.setText("");
-                
-                // 更新搜索结果
-                searchResults.clear();
-                searchResults.addAll(finalResults);
-                searchResultAdapter.setData(finalResults);
-                
-                // 执行UI更新，包括无结果提示的显示/隐藏
-                showSearchResults();
-            });
+            
+            // 使用WeatherDataHelper加载每个搜索结果城市的天气数据
+            com.microntek.weatherapp.util.WeatherDataHelper.loadCitiesWeather(
+                    getApplicationContext(),
+                    finalResults,
+                    true, // 优先使用缓存
+                    new com.microntek.weatherapp.util.WeatherDataHelper.WeatherDataCallback() {
+                        @Override
+                        public void onDataLoaded(List<City> updatedCities) {
+                            // 更新搜索结果
+                            searchResults.clear();
+                            searchResults.addAll(updatedCities);
+                            
+                            // 执行UI更新
+                            hideLoading();
+                            searchResultAdapter.notifyDataSetChanged();
+                            showSearchResults();
+                        }
+                        
+                        @Override
+                        public void onError(String errorMessage) {
+                            // 即使加载天气失败，也显示搜索结果
+                            searchResults.clear();
+                            searchResults.addAll(finalResults);
+                            
+                            hideLoading();
+                            searchResultAdapter.notifyDataSetChanged();
+                            showSearchResults();
+                            
+                            Log.e(TAG, "加载搜索城市天气失败: " + errorMessage);
+                        }
+                    });
         });
     }
     
@@ -393,90 +408,40 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
         
         showLoading();
         
-        // 在后台线程加载数据
-        executor.execute(() -> {
-            List<City> updatedCities = new ArrayList<>();
-            
-            for (City city : new ArrayList<>(cities)) {
-                try {
-                    // 使用缓存方式获取当前天气
-                    com.microntek.weatherapp.model.Weather weather;
-                    try {
-                        if (city.isCurrentLocation() || city.getId().contains(",")) {
-                            // 使用经纬度获取天气
-                            weather = WeatherApi.getCurrentWeatherByLocationWithCache(
-                                    getApplicationContext(), 
-                                    city.getLatitude(), 
-                                    city.getLongitude());
-                        } else {
-                            // 使用城市ID获取天气
-                            weather = WeatherApi.getCurrentWeatherWithCache(
-                                    getApplicationContext(), 
-                                    city.getId());
-                        }
-                    } catch (Exception e) {
-                        Log.e(TAG, "使用缓存获取天气失败，尝试从网络获取: " + e.getMessage());
+        // 使用WeatherDataHelper加载城市天气数据
+        com.microntek.weatherapp.util.WeatherDataHelper.loadCitiesWeather(
+                getApplicationContext(),
+                new ArrayList<>(cities),
+                true, // 优先使用缓存
+                new com.microntek.weatherapp.util.WeatherDataHelper.WeatherDataCallback() {
+                    @Override
+                    public void onDataLoaded(List<City> updatedCities) {
+                        // 获取当前城市
+                        currentCity = cityPreferences.getCurrentCity();
                         
-                        // 如果缓存获取失败，尝试直接从API获取
-                        if (city.isCurrentLocation() || city.getId().contains(",")) {
-                            weather = WeatherApi.getCurrentWeatherByLocation(
-                                    city.getLatitude(), 
-                                    city.getLongitude());
-                        } else {
-                            weather = WeatherApi.getCurrentWeather(city.getId());
-                        }
+                        // 对城市列表进行排序
+                        List<City> sortedCities = com.microntek.weatherapp.util.WeatherDataHelper.sortCitiesList(
+                                updatedCities, currentCity);
+                        
+                        // 更新UI
+                        cities.clear();
+                        cities.addAll(sortedCities);
+                        hideLoading();
+                        cityListAdapter.notifyDataSetChanged();
                     }
                     
-                    // 更新城市的天气信息
-                    city.setTemperature(weather.getCurrentTemp());
-                    city.setWeatherDesc(weather.getWeatherDesc());
-                    city.setWeatherIcon(weather.getWeatherIcon());
-                    
-                    // 更新空气质量信息
-                    city.setAirQuality(weather.getAirQuality());
-                    city.setAqi(weather.getAqi());
-                    
-                    updatedCities.add(city);
-                } catch (Exception e) {
-                    Log.e(TAG, "加载城市 " + city.getName() + " 的天气失败: " + e.getMessage());
-                    // 出错时仍保留城市，但不更新天气
-                    updatedCities.add(city);
-                }
-            }
-            
-            // 在主线程更新UI
-            final List<City> finalCities = updatedCities;
-            mainHandler.post(() -> {
-                hideLoading();
-                
-                // 获取当前城市
-                currentCity = cityPreferences.getCurrentCity();
-                
-                // 重新排序城市列表，将当前城市排在第一位
-                List<City> sortedCities = new ArrayList<>();
-                
-                // 首先添加当前城市
-                for (City c : finalCities) {
-                    if (currentCity != null && c.getId().equals(currentCity.getId())) {
-                        c.setCurrentLocation(true);
-                        sortedCities.add(c);
-                        break;
+                    @Override
+                    public void onError(String errorMessage) {
+                        hideLoading();
+                        Log.e(TAG, "加载城市天气失败: " + errorMessage);
+                        Snackbar.make(
+                                findViewById(android.R.id.content),
+                                "加载城市天气失败: " + errorMessage,
+                                Snackbar.LENGTH_LONG)
+                                .setAction("重试", v -> loadCitiesWeather())
+                                .show();
                     }
-                }
-                
-                // 然后添加其他城市
-                for (City c : finalCities) {
-                    if (currentCity == null || !c.getId().equals(currentCity.getId())) {
-                        c.setCurrentLocation(false);
-                        sortedCities.add(c);
-                    }
-                }
-                
-                cities.clear();
-                cities.addAll(sortedCities);
-                cityListAdapter.notifyDataSetChanged();
-            });
-        });
+                });
     }
     
     /**
@@ -489,21 +454,22 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
         }
         
         // 防止重复添加操作
-        if (isLoading.getAndSet(true)) {
+        final String taskId = "ADD_CITY_" + city.getId();
+        if (!com.microntek.weatherapp.util.TaskManager.canExecuteTask(taskId)) {
             return;
         }
         
         // 检查城市数量限制
         if (cityPreferences.getSavedCities().size() >= 5) {
             Toast.makeText(this, "最多只能添加5个城市", Toast.LENGTH_SHORT).show();
-            isLoading.set(false);
+            com.microntek.weatherapp.util.TaskManager.completeTask(taskId);
             return;
         }
         
         // 显示加载状态
         showLoading();
         
-        executor.execute(() -> {
+        com.microntek.weatherapp.util.ExecutorManager.executeSingle(() -> {
             try {
                 // 检查城市是否已存在
                 boolean cityExists = false;
@@ -515,11 +481,11 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
                 }
                 
                 if (cityExists) {
-                    mainHandler.post(() -> {
+                    com.microntek.weatherapp.util.ExecutorManager.executeOnMain(() -> {
                         hideLoading();
                         Toast.makeText(CityManagerActivity.this, 
                                 "该城市已添加", Toast.LENGTH_SHORT).show();
-                        isLoading.set(false);
+                        com.microntek.weatherapp.util.TaskManager.completeTask(taskId);
                     });
                     return;
                 }
@@ -528,47 +494,25 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
                 boolean success = cityPreferences.addCity(city);
                 
                 if (!success) {
-                    mainHandler.post(() -> {
+                    com.microntek.weatherapp.util.ExecutorManager.executeOnMain(() -> {
                         hideLoading();
                         Toast.makeText(CityManagerActivity.this, 
                                 "添加城市失败", Toast.LENGTH_SHORT).show();
-                        isLoading.set(false);
+                        com.microntek.weatherapp.util.TaskManager.completeTask(taskId);
                     });
                     return;
                 }
                 
-                // 刷新城市列表
-                List<City> updatedCities = cityPreferences.getSavedCities();
+                // 获取并排序城市列表
+                List<City> allCities = cityPreferences.getSavedCities();
+                List<City> sortedCities = com.microntek.weatherapp.util.WeatherDataHelper.sortCitiesList(
+                        allCities, cityPreferences.getCurrentCity());
                 
-                // 获取当前城市
-                currentCity = cityPreferences.getCurrentCity();
-                
-                // 重新排序城市列表，将当前城市排在第一位
-                List<City> sortedCities = new ArrayList<>();
-                
-                // 首先添加当前城市
-                for (City c : updatedCities) {
-                    if (currentCity != null && c.getId().equals(currentCity.getId())) {
-                        c.setCurrentLocation(true);
-                        sortedCities.add(c);
-                        break;
-                    }
-                }
-                
-                // 然后添加其他城市
-                for (City c : updatedCities) {
-                    if (currentCity == null || !c.getId().equals(currentCity.getId())) {
-                        c.setCurrentLocation(false);
-                        sortedCities.add(c);
-                    }
-                }
-                
-                final List<City> finalSortedCities = sortedCities;
-                mainHandler.post(() -> {
+                com.microntek.weatherapp.util.ExecutorManager.executeOnMain(() -> {
                     hideLoading();
                     
                     cities.clear();
-                    cities.addAll(finalSortedCities);
+                    cities.addAll(sortedCities);
                     
                     // 切换回城市列表界面
                     hideSearchResult();
@@ -581,11 +525,11 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
                             "已添加城市: " + city.getName(), 
                             Snackbar.LENGTH_LONG).show();
                     
-                    isLoading.set(false);
+                    com.microntek.weatherapp.util.TaskManager.completeTask(taskId);
                 });
             } catch (Exception e) {
                 Log.e(TAG, "添加城市时出错: " + e.getMessage());
-                mainHandler.post(() -> {
+                com.microntek.weatherapp.util.ExecutorManager.executeOnMain(() -> {
                     hideLoading();
                     Snackbar.make(
                             findViewById(android.R.id.content), 
@@ -593,7 +537,7 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
                             Snackbar.LENGTH_LONG)
                             .setAction("重试", v -> addCity(city))
                             .show();
-                    isLoading.set(false);
+                    com.microntek.weatherapp.util.TaskManager.completeTask(taskId);
                 });
             }
         });
@@ -609,22 +553,23 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
         }
         
         // 防止重复删除操作
-        if (isLoading.getAndSet(true)) {
+        final String taskId = "DELETE_CITY_" + city.getId();
+        if (!com.microntek.weatherapp.util.TaskManager.canExecuteTask(taskId)) {
             return;
         }
         
         // 显示加载状态
         showLoading();
         
-        executor.execute(() -> {
+        com.microntek.weatherapp.util.ExecutorManager.executeSingle(() -> {
             try {
                 // 如果是当前城市，不能删除
                 if (currentCity != null && city.getId().equals(currentCity.getId())) {
-                    mainHandler.post(() -> {
+                    com.microntek.weatherapp.util.ExecutorManager.executeOnMain(() -> {
                         hideLoading();
                         Toast.makeText(CityManagerActivity.this, 
                                 "不能删除当前选中的城市", Toast.LENGTH_SHORT).show();
-                        isLoading.set(false);
+                        com.microntek.weatherapp.util.TaskManager.completeTask(taskId);
                     });
                     return;
                 }
@@ -633,11 +578,11 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
                 boolean success = cityPreferences.removeCity(city);
                 
                 if (!success) {
-                    mainHandler.post(() -> {
+                    com.microntek.weatherapp.util.ExecutorManager.executeOnMain(() -> {
                         hideLoading();
                         Toast.makeText(CityManagerActivity.this, 
                                 "删除城市失败", Toast.LENGTH_SHORT).show();
-                        isLoading.set(false);
+                        com.microntek.weatherapp.util.TaskManager.completeTask(taskId);
                     });
                     return;
                 }
@@ -648,12 +593,15 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
                 // 获取当前城市（可能已经更新）
                 currentCity = cityPreferences.getCurrentCity();
                 
-                final List<City> finalUpdatedCities = updatedCities;
-                mainHandler.post(() -> {
+                // 对城市列表进行排序
+                List<City> sortedCities = com.microntek.weatherapp.util.WeatherDataHelper.sortCitiesList(
+                        updatedCities, currentCity);
+                
+                com.microntek.weatherapp.util.ExecutorManager.executeOnMain(() -> {
                     hideLoading();
                     
                     cities.clear();
-                    cities.addAll(finalUpdatedCities);
+                    cities.addAll(sortedCities);
                     
                     cityListAdapter.notifyDataSetChanged();
                     
@@ -662,11 +610,11 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
                             "已删除城市: " + city.getName(), 
                             Snackbar.LENGTH_LONG).show();
                     
-                    isLoading.set(false);
+                    com.microntek.weatherapp.util.TaskManager.completeTask(taskId);
                 });
             } catch (Exception e) {
                 Log.e(TAG, "删除城市时出错: " + e.getMessage());
-                mainHandler.post(() -> {
+                com.microntek.weatherapp.util.ExecutorManager.executeOnMain(() -> {
                     hideLoading();
                     Snackbar.make(
                             findViewById(android.R.id.content), 
@@ -674,7 +622,7 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
                             Snackbar.LENGTH_LONG)
                             .setAction("重试", v -> deleteCity(city))
                             .show();
-                    isLoading.set(false);
+                    com.microntek.weatherapp.util.TaskManager.completeTask(taskId);
                 });
             }
         });
@@ -690,23 +638,24 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
         }
         
         // 防止重复切换操作
-        if (isLoading.getAndSet(true)) {
+        final String taskId = "SWITCH_CITY_" + city.getId();
+        if (!com.microntek.weatherapp.util.TaskManager.canExecuteTask(taskId)) {
             return;
         }
         
         // 显示加载状态
         showLoading();
         
-        executor.execute(() -> {
+        com.microntek.weatherapp.util.ExecutorManager.executeSingle(() -> {
             try {
                 // 检查是否已经是当前城市
                 City current = cityPreferences.getCurrentCity();
                 if (current != null && current.getId().equals(city.getId())) {
-                    mainHandler.post(() -> {
+                    com.microntek.weatherapp.util.ExecutorManager.executeOnMain(() -> {
                         hideLoading();
                         Toast.makeText(CityManagerActivity.this, 
                                 city.getName() + " 已是当前城市", Toast.LENGTH_SHORT).show();
-                        isLoading.set(false);
+                        com.microntek.weatherapp.util.TaskManager.completeTask(taskId);
                     });
                     return;
                 }
@@ -715,41 +664,23 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
                 boolean success = cityPreferences.setCurrentCity(city);
                 
                 if (!success) {
-                    mainHandler.post(() -> {
+                    com.microntek.weatherapp.util.ExecutorManager.executeOnMain(() -> {
                         hideLoading();
                         Toast.makeText(CityManagerActivity.this, 
                                 "切换城市失败", Toast.LENGTH_SHORT).show();
-                        isLoading.set(false);
+                        com.microntek.weatherapp.util.TaskManager.completeTask(taskId);
                     });
                     return;
                 }
                 
                 currentCity = city;
                 
-                // 刷新城市列表，更新当前城市标记
-                List<City> updatedCities = cityPreferences.getSavedCities();
+                // 获取并排序城市列表
+                List<City> allCities = cityPreferences.getSavedCities();
+                List<City> sortedCities = com.microntek.weatherapp.util.WeatherDataHelper.sortCitiesList(
+                        allCities, city);
                 
-                // 重新排序城市列表，将当前城市排在第一位
-                List<City> sortedCities = new ArrayList<>();
-                
-                // 首先添加当前城市
-                for (City c : updatedCities) {
-                    if (c.getId().equals(city.getId())) {
-                        c.setCurrentLocation(true);
-                        sortedCities.add(c);
-                        break;
-                    }
-                }
-                
-                // 然后添加其他城市
-                for (City c : updatedCities) {
-                    if (!c.getId().equals(city.getId())) {
-                        c.setCurrentLocation(false);
-                        sortedCities.add(c);
-                    }
-                }
-                
-                mainHandler.post(() -> {
+                com.microntek.weatherapp.util.ExecutorManager.executeOnMain(() -> {
                     hideLoading();
                     
                     cities.clear();
@@ -762,20 +693,20 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
                             Snackbar.LENGTH_SHORT).show();
                     
                     // 延迟500ms，让用户看到切换成功的提示
-                    new Handler().postDelayed(() -> {
+                    com.microntek.weatherapp.util.ExecutorManager.executeOnMainDelayed(() -> {
                         // 返回主页并设置标志位
                         Intent intent = new Intent(CityManagerActivity.this, MainActivity.class);
                         intent.putExtra("fromOtherActivity", true);
                         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
                         startActivity(intent);
                         finish();
+                        
+                        com.microntek.weatherapp.util.TaskManager.completeTask(taskId);
                     }, 500);
-                    
-                    isLoading.set(false);
                 });
             } catch (Exception e) {
                 Log.e(TAG, "切换城市时出错: " + e.getMessage());
-                mainHandler.post(() -> {
+                com.microntek.weatherapp.util.ExecutorManager.executeOnMain(() -> {
                     hideLoading();
                     Snackbar.make(
                             findViewById(android.R.id.content), 
@@ -783,7 +714,7 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
                             Snackbar.LENGTH_LONG)
                             .setAction("重试", v -> switchCurrentCity(city))
                             .show();
-                    isLoading.set(false);
+                    com.microntek.weatherapp.util.TaskManager.completeTask(taskId);
                 });
             }
         });
@@ -1076,16 +1007,6 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
         // 清理资源
         if (cityPreferences != null) {
             cityPreferences.onDestroy();
-        }
-        
-        // 取消所有后台任务
-        if (executor instanceof java.util.concurrent.ExecutorService) {
-            try {
-                ((java.util.concurrent.ExecutorService) executor).shutdown();
-                Log.i(TAG, "已关闭后台任务执行器");
-            } catch (Exception e) {
-                Log.e(TAG, "关闭执行器失败: " + e.getMessage());
-            }
         }
         
         super.onDestroy();
