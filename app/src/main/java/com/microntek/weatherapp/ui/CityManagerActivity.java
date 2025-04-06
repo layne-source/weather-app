@@ -138,6 +138,9 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
      * 设置定位按钮
      */
     private void setupLocationButton() {
+        // 设置更现代美观的定位图标
+        locationButton.setImageResource(R.drawable.ic_my_location);
+        
         locationButton.setOnClickListener(v -> {
             // 检查并请求位置权限
             if (!locationHelper.hasLocationPermission()) {
@@ -950,15 +953,15 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
             // isCurrentLocation = true 表示这个城市是通过定位获取的用户位置城市
             // isCurrentCity = true 表示这个城市是用户当前选择作为主要显示的城市
             if (city.isCurrentLocation()) {
-                // 如果是定位城市，显示导航图标
-                holder.btnDelete.setImageResource(android.R.drawable.ic_menu_mylocation);
+                // 如果是定位城市，显示导航图标，使用更现代美观的定位图标
+                holder.btnDelete.setImageResource(R.drawable.ic_location);
                 holder.btnDelete.setOnClickListener(v -> {
                     Toast.makeText(CityManagerActivity.this, 
                             "这是您的当前位置城市", Toast.LENGTH_SHORT).show();
                 });
             } else {
                 // 如果不是定位城市，显示删除图标
-                holder.btnDelete.setImageResource(android.R.drawable.ic_menu_delete);
+                holder.btnDelete.setImageResource(R.drawable.ic_delete);
                 holder.btnDelete.setOnClickListener(v -> {
                     // 无法删除当前选中的城市
                     if (isCurrentCity) {
