@@ -55,8 +55,11 @@ public class WeatherDataService extends Service {
                     forceUpdateWeatherData();
                 }
             } else if (ACTION_CITY_CHANGED.equals(action)) {
-                Log.d(TAG, "当前城市已更改，更新天气数据");
-                updateWeatherBroadcast();
+                Log.d(TAG, "当前城市已更改，延迟2秒后更新天气数据");
+                // 延迟2秒更新天气数据，确保城市数据加载完成
+                ExecutorManager.executeOnMainDelayed(() -> {
+                    updateWeatherBroadcast();
+                }, 2000);
             }
         }
     };

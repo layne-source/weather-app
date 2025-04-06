@@ -1,181 +1,199 @@
 # 天气应用 (Weather App)
 
-## 项目概述
-
-这是一个功能全面的天气预报应用，为用户提供实时天气信息、空气质量数据和未来天气预报。应用采用现代化的UI设计，支持深色模式，并提供丰富的天气相关数据。系统架构采用分层设计，实现了高效的缓存机制，提供离线访问和数据持久化功能。
+一个功能全面的天气应用，提供实时天气信息、多城市管理、定位服务和第三方应用接口支持。
 
 ## 功能特点
 
-- **实时天气**: 显示当前温度、天气状况、体感温度等信息
-- **天气预报**: 提供未来7天的天气预报
-- **空气质量**: 详细展示AQI、PM2.5、PM10等空气质量指标
-- **城市管理**: 支持添加、删除和切换多个城市
-- **生活指数**: 提供穿衣、运动、旅行、洗车等多种生活指数
-- **离线模式**: 支持无网络环境下使用缓存数据
-- **深色模式**: 支持深色主题，保护夜间视力
-- **定位功能**: 支持使用当前位置获取天气信息
-- **下拉刷新**: 提供下拉刷新功能，方便用户获取最新天气数据
-- **智能缓存**: 实现了基于使用频率的动态缓存管理系统
+- 实时天气数据显示（温度、天气状况、湿度、风向等）
+- 多城市管理（添加、删除、排序）
+- 当前位置自动定位和天气获取
+- 空气质量指数 (AQI) 信息
+- 天气预报（未来几天）
+- 系统级天气数据广播服务，支持第三方应用集成
+- 开机自启动，后台自动更新天气数据
+- 美观易用的界面设计
 
 ## 系统架构
 
-应用采用分层架构设计，主要分为以下几层：
+应用遵循 MVC 架构设计：
 
-1. **表现层**：Activity和UI组件，负责界面展示和用户交互
-2. **网络层**：WeatherApi类，封装和风天气API的网络请求
-3. **缓存层**：WeatherDataCache类，实现数据缓存策略
-4. **数据持久层**：SharedPreferences实现的数据存储
-5. **模型层**：Weather和City等数据模型类
+- **模型层 (Model)**: 数据对象如城市和天气信息
+- **视图层 (View)**: Activity、Fragment和布局文件
+- **控制层 (Controller)**: 业务逻辑处理和数据管理
 
-### 数据流
+同时采用服务化设计，将天气数据更新和广播功能封装在系统服务中，保证数据一致性和高效共享。
 
+## 第三方应用集成
+
+### 概述
+
+本应用提供了系统级广播服务，使第三方应用可以方便地访问天气数据而无需自行实现天气API调用。主要特点：
+
+- 定时广播最新天气数据（每小时更新）
+- 支持按需请求天气数据更新
+- 开机自启动，确保数据持续可用
+- 广播内容包含完整的天气和城市信息
+
+### 集成步骤
+
+#### 1. 添加广播接收器
+
+在您的应用中创建BroadcastReceiver来接收天气数据：
+
+```java
+private final BroadcastReceiver weatherReceiver = new BroadcastReceiver() {
+    @Override
+    public void onReceive(Context context, Intent intent) {
+        String action = intent.getAction();
+        if ("com.microntek.weatherapp.WEATHER_DATA".equals(action)) {
+            // 处理天气数据
+            String cityName = intent.getStringExtra("city_name");
+            int currentTemp = intent.getIntExtra("current_temp", 0);
+            String weatherDesc = intent.getStringExtra("weather_desc");
+            
+            // 更新UI或处理数据...
+        }
+    }
+};
 ```
-用户操作 → Activity → WeatherApi → 网络请求/缓存数据 → 数据处理 → UI更新
+
+#### 2. 注册和注销接收器
+
+在Activity或Service的生命周期方法中注册接收器：
+
+```java
+@Override
+protected void onCreate(Bundle savedInstanceState) {
+    super.onCreate(savedInstanceState);
+    // 其他初始化代码...
+    
+    IntentFilter filter = new IntentFilter();
+    filter.addAction("com.microntek.weatherapp.WEATHER_DATA");
+    registerReceiver(weatherReceiver, filter);
+}
+
+@Override
+protected void onDestroy() {
+    unregisterReceiver(weatherReceiver);
+    super.onDestroy();
+}
 ```
 
-- 用户操作触发数据加载请求
-- 先检查缓存是否有效，无效或过期则请求网络
-- 网络数据获取后存入缓存系统
-- 数据处理后通过UI组件展示给用户
+#### 3. 请求天气数据更新（可选）
 
-## 技术栈
+如需主动请求天气数据更新：
 
-- **开发语言**: Java
-- **最低SDK版本**: Android 10 (API 29)
-- **目标SDK版本**: Android 14 (API 34)
-- **网络请求**: OkHttp 4.10.0
-- **JSON解析**: Gson 2.9.0
-- **缓存策略**: 自定义LRU内存缓存 + SharedPreferences持久化
-- **UI组件**: 
-  - Material Components 1.9.0
-  - AndroidX AppCompat 1.6.1
-  - ConstraintLayout 2.1.4
-  - RecyclerView 1.3.0
-  - CardView 1.0.0
-  - SwipeRefreshLayout 1.1.0
+```java
+private void requestWeatherUpdate() {
+    Intent intent = new Intent("com.microntek.weatherapp.REQUEST_UPDATE");
+    sendBroadcast(intent);
+}
+```
+
+### 天气数据广播字段说明
+
+广播Intent (`com.microntek.weatherapp.WEATHER_DATA`) 包含以下数据字段：
+
+| 字段名称 | 类型 | 说明 |
+|---------|------|------|
+| `city_name` | String | 城市名称 |
+| `city_id` | String | 城市唯一标识 |
+| `is_current_location` | boolean | 是否为当前位置城市 |
+| `current_temp` | int | 当前温度（摄氏度） |
+| `high_temp` | int | 最高温度（摄氏度） |
+| `low_temp` | int | 最低温度（摄氏度） |
+| `feels_like_temp` | int | 体感温度（摄氏度） |
+| `weather_desc` | String | 天气状况描述（如"晴"、"多云"） |
+| `weather_icon` | String | 天气图标代码 |
+| `weather_code` | int | 天气状况代码 |
+| `humidity` | int | 湿度百分比（0-100） |
+| `wind_direction` | String | 风向（如"东北风"） |
+| `wind_speed` | String | 风速（如"3级"） |
+| `aqi` | int | 空气质量指数 |
+| `air_quality` | String | 空气质量级别（如"优"、"良"） |
+| `last_update_time` | long | 天气数据最后更新时间（毫秒时间戳） |
+| `update_time` | long | 广播发送时间（毫秒时间戳） |
+
+### 广播Action常量
+
+| Action | 说明 |
+|--------|------|
+| `com.microntek.weatherapp.WEATHER_DATA` | 天气数据广播 |
+| `com.microntek.weatherapp.REQUEST_UPDATE` | 请求更新天气数据 |
+| `com.microntek.weatherapp.CITY_CHANGED` | 当前城市已变更 |
+| `com.microntek.weatherapp.SERVICE_STATUS` | 服务状态信息 |
+
+### 提供的辅助类
+
+为简化集成过程，我们提供了`WeatherDataManager`类，封装了广播接收和发送的逻辑：
+
+```java
+// 初始化
+WeatherDataManager weatherManager = new WeatherDataManager(context);
+weatherManager.setWeatherDataListener(new WeatherDataManager.WeatherDataListener() {
+    @Override
+    public void onWeatherDataReceived(WeatherDataManager.WeatherData data) {
+        // 处理接收到的天气数据
+        String cityName = data.cityName;
+        int temperature = data.currentTemp;
+        // 更新UI...
+    }
+    
+    @Override
+    public void onServiceStatusReceived(boolean isRunning, long lastUpdateTime, boolean hasData) {
+        // 处理服务状态
+    }
+});
+
+// 注册接收器
+weatherManager.register();
+
+// 请求更新数据
+weatherManager.requestWeatherUpdate(null);
+
+// 在组件销毁时注销接收器
+@Override
+protected void onDestroy() {
+    weatherManager.unregister();
+    super.onDestroy();
+}
+```
+
+### 完整集成示例
+
+请参考项目中的示例代码：
+- `WeatherDataReceiverDemo.java` - 完整的Activity示例
+- `WeatherDataManager.java` - 便捷的数据管理工具类
+- `WeatherDataUsageExample.java` - 最简单的实现示例
+
+## 开发环境
+
+- Android Studio 4.2+
+- Gradle 7.0+
+- minSdkVersion: 21 (Android 5.0)
+- targetSdkVersion: 31 (Android 12)
+- Java 8
 
 ## 项目结构
 
 ```
-com.microntek.weatherapp/
-├── adapter/
-│   └── CityAdapter.java            # 城市列表适配器
-├── api/
-│   └── WeatherApi.java             # 天气API接口封装
-├── model/
-│   ├── City.java                   # 城市数据模型
-│   ├── Weather.java                # 天气数据模型
-│   └── DailyForecast.java          # 每日预报数据模型(Weather内部类)
-├── ui/
-│   ├── AirQualityActivity.java     # 空气质量详情页面
-│   ├── CityManagerActivity.java    # 城市管理页面
-│   └── SettingsActivity.java       # 设置页面
-├── util/
-│   ├── AirPollutionUtil.java       # 空气污染指数工具类
-│   ├── CityPreferences.java        # 城市偏好设置工具类
-│   ├── ThemeHelper.java            # 主题管理工具类
-│   ├── WeatherBackgroundUtil.java  # 天气背景生成工具类
-│   └── WeatherDataCache.java       # 天气数据缓存管理器
-└── MainActivity.java               # 主页面
+app/
+├── src/main/
+│   ├── java/com/microntek/weatherapp/
+│   │   ├── api/             # 天气API相关类
+│   │   ├── model/           # 数据模型类
+│   │   ├── service/         # 服务类（包含天气数据广播服务）
+│   │   ├── receiver/        # 广播接收器类
+│   │   ├── ui/              # Activity和Fragment等界面类
+│   │   ├── util/            # 工具类
+│   │   ├── demo/            # 第三方集成示例代码
+│   │   └── MainActivity.java# 主界面Activity
+│   └── res/                 # 资源文件
+└── build.gradle            # 构建配置
 ```
 
-## 缓存系统设计
+## 版权和许可
 
-应用实现了一个高效的多级缓存系统，具有以下特点：
+© 2023 HCT Weather App
 
-1. **分级缓存**：
-   - 内存缓存：使用LruCache实现，提供最快的数据访问
-   - 磁盘缓存：使用SharedPreferences实现持久化存储
-   - 备份机制：定期创建重要数据备份，防止数据损坏
-
-2. **智能缓存策略**：
-   - 基于使用频率的动态缓存更新间隔
-   - 不同类型数据设置不同的缓存有效期
-   - 自动清理过期缓存数据
-
-3. **容错机制**：
-   - 错误计数和自动修复损坏的缓存
-   - 备份恢复机制，在主缓存损坏时自动从备份恢复
-   - 离线模式下的数据可用性保证
-
-4. **资源优化**：
-   - 启动时清理过期缓存数据
-   - 应用退出时安全关闭资源，防止泄漏
-   - 存储空间不足时智能调整备份策略
-
-## 最近优化
-
-### 缓存系统
-- **实现了多级缓存策略**：内存缓存、磁盘缓存和备份缓存互相配合，提高数据访问速度和可靠性
-- **添加了缓存验证与修复机制**：应用可自动检测并修复损坏的缓存数据
-- **优化了缓存备份策略**：定期备份重要数据，防止数据丢失
-- **完善了错误处理**：添加了重试机制和错误计数，提高系统稳定性
-
-### 城市管理与缓存集成
-- **优化了城市管理与缓存机制的协作**：
-  - 添加城市时自动预加载并缓存天气数据
-  - 删除城市时自动清除相关缓存数据
-  - 切换城市时优先加载当前城市的天气数据
-  - 应用启动或从后台恢复时智能同步所有城市的缓存数据
-- **改进了异步处理**：
-  - 所有城市管理操作（添加、删除、切换）均在后台线程执行，避免UI卡顿
-  - 使用线程池管理后台任务，防止资源泄漏
-  - 添加了加载状态指示器，提升用户体验
-- **增强了错误处理**：
-  - 添加了详细的错误日志记录
-  - 实现了用户友好的错误提示和重试机制
-  - 防止重复操作导致的异常
-
-### 资源管理
-- **完善了资源释放机制**：
-  - 在Activity或应用销毁时自动关闭线程池和释放资源
-  - 使用Single-Thread Executor避免过多任务积压
-  - 实现了优雅的资源释放流程
-
-### 其他优化
-- **资源泄漏修复**：完善了资源关闭机制，防止内存泄漏
-- **缓存系统增强**：实现了基于使用频率的动态备份间隔
-- **线程安全性提升**：为所有缓存操作添加了同步机制
-- **错误处理增强**：改进了缓存错误检测和恢复机制
-- **代码优化**：移除了未使用的代码和方法，提高代码质量
-- **UI优化**：添加了下拉刷新功能和更新时间显示
-- **离线模式增强**：改进了网络不可用时的用户体验
-
-## 使用说明
-
-1. 首次启动时，应用会默认显示北京的天气情况
-2. 点击城市名称可进入城市管理页面添加或切换城市
-3. 通过底部导航栏可以快速访问首页、城市管理、空气质量和设置页面
-4. 在设置页面可以切换深色模式
-5. 下拉刷新可以获取最新的天气数据
-6. 离线模式下会自动显示最近缓存的天气数据
-
-## 开发配置
-
-### 前提条件
-
-- Android Studio Hedgehog | 2023.1.1或更高版本
-- JDK 1.8或更高版本
-- 和风天气API密钥（需要在WeatherApi.java中替换为自己的API_KEY）
-
-### 构建步骤
-
-1. 克隆项目到本地
-2. 在Android Studio中打开项目
-3. 在WeatherApi.java中替换API_KEY为自己的和风天气API密钥
-4. 构建并运行项目
-
-## API密钥设置
-
-在使用应用前，需要在`WeatherApi.java`文件中替换为自己的和风天气API密钥：
-
-```java
-// 和风天气API密钥和基础URL
-private static final String API_KEY = "YOUR_API_KEY"; // 请替换为您自己的API密钥
-```
-
-## 注意事项
-
-- 应用使用和风天气API，请确保有足够的API调用额度
-- 位置权限用于获取当前位置的天气信息，请在使用时授予应用相关权限
-- 首次启动时可能需要网络连接来获取初始数据
+本项目遵循Apache 2.0许可协议
