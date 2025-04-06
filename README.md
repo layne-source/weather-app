@@ -194,6 +194,6 @@ app/
 
 ## 版权和许可
 
-© 2023 HCT Weather App
+© 2025 HCT Weather App
 
 本项目遵循Apache 2.0许可协议
