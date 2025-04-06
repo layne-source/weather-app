@@ -32,10 +32,12 @@ import com.microntek.weatherapp.MainActivity;
 import com.microntek.weatherapp.R;
 import com.microntek.weatherapp.api.WeatherApi;
 import com.microntek.weatherapp.model.City;
+import com.microntek.weatherapp.model.Weather;
 import com.microntek.weatherapp.util.CityPreferences;
 import com.microntek.weatherapp.util.WeatherDataHelper;
 import com.microntek.weatherapp.util.ExecutorManager;
 import com.microntek.weatherapp.util.TaskManager;
+import com.microntek.weatherapp.util.LocationHelper;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -62,11 +64,15 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
     // 添加缺失的UI组件变量
     private TextView noResultsText;
     private ImageButton clearSearchButton;
+    private ImageButton locationButton;
 
     private CityPreferences cityPreferences;
     private CityListAdapter cityListAdapter;
     private List<City> searchResults = new ArrayList<>();
     private SearchResultAdapter searchResultAdapter;
+    
+    // 添加位置工具类
+    private LocationHelper locationHelper;
     
     // 搜索模式标志
     private boolean isSearchMode = false;
@@ -85,6 +91,7 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
         // 初始化搜索相关UI组件
         noResultsText = findViewById(R.id.tv_no_results);
         clearSearchButton = findViewById(R.id.btn_clear_search);
+        locationButton = findViewById(R.id.btn_location);
 
         // 设置工具栏
         androidx.appcompat.widget.Toolbar toolbar = findViewById(R.id.toolbar);
@@ -97,6 +104,20 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
         // 初始化数据
         cityPreferences = new CityPreferences(this);
         
+        // 初始化位置工具类
+        locationHelper = new LocationHelper(this, new LocationHelper.LocationCallback() {
+            @Override
+            public void onLocationSuccess(double latitude, double longitude) {
+                processLocationResult(latitude, longitude);
+            }
+
+            @Override
+            public void onLocationFailed(String error) {
+                hideLoading();
+                Toast.makeText(CityManagerActivity.this, getString(R.string.location_failed) + ": " + error, Toast.LENGTH_SHORT).show();
+            }
+        });
+        
         // 设置城市列表
         setupCityList();
         
@@ -108,6 +129,87 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
         
         // 设置底部导航栏
         setupBottomNavigation();
+        
+        // 设置定位按钮
+        setupLocationButton();
+    }
+    
+    /**
+     * 设置定位按钮
+     */
+    private void setupLocationButton() {
+        locationButton.setOnClickListener(v -> {
+            // 检查并请求位置权限
+            if (!locationHelper.hasLocationPermission()) {
+                locationHelper.requestLocationPermission(this);
+                return;
+            }
+            
+            // 检查位置服务是否开启
+            if (!locationHelper.isLocationEnabled()) {
+                Snackbar.make(findViewById(android.R.id.content), 
+                        "位置服务未开启，请开启后再试", 
+                        Snackbar.LENGTH_LONG)
+                        .setAction("设置", view -> locationHelper.openLocationSettings(this))
+                        .show();
+                return;
+            }
+            
+            // 显示正在定位提示
+            Toast.makeText(this, R.string.locating, Toast.LENGTH_SHORT).show();
+            showLoading();
+            
+            // 开始定位
+            locationHelper.getCurrentLocation();
+        });
+    }
+    
+    /**
+     * 处理位置定位结果
+     */
+    private void processLocationResult(double latitude, double longitude) {
+        // 在后台线程获取城市信息
+        ExecutorManager.getThreadPoolExecutor().execute(() -> {
+            try {
+                // 获取当前城市信息
+                City city = WeatherApi.getCityByLocation(latitude, longitude);
+                
+                // 在添加城市前获取空气质量信息
+                try {
+                    String locationId = city.getLongitude() + "," + city.getLatitude();
+                    // 获取城市天气信息
+                    Weather weather = WeatherApi.getCurrentWeatherByLocation(latitude, longitude);
+                    // 获取空气质量信息
+                    weather = WeatherApi.getAirQuality(locationId, weather);
+                    
+                    // 将空气质量信息和天气信息设置到城市对象
+                    city.setAirQuality(weather.getAirQuality());
+                    city.setAqi(weather.getAqi());
+                    city.setTemperature(weather.getCurrentTemp());
+                    city.setWeatherDesc(weather.getWeatherDesc());
+                    city.setWeatherIcon(weather.getWeatherIcon());
+                } catch (Exception e) {
+                    Log.e(TAG, "获取空气质量数据失败: " + e.getMessage());
+                    // 即使获取空气质量失败，仍然继续添加城市
+                }
+                
+                // 切换到主线程添加城市
+                runOnUiThread(() -> {
+                    hideLoading();
+                    Toast.makeText(CityManagerActivity.this, R.string.location_successful, Toast.LENGTH_SHORT).show();
+                    // 添加城市，和普通添加城市的逻辑一样
+                    addCity(city);
+                });
+            } catch (Exception e) {
+                Log.e(TAG, "获取城市信息失败: " + e.getMessage());
+                runOnUiThread(() -> {
+                    hideLoading();
+                    Toast.makeText(CityManagerActivity.this, 
+                            "获取城市信息失败: " + e.getMessage(), 
+                            Toast.LENGTH_SHORT).show();
+                });
+            }
+        });
     }
     
     @Override
@@ -116,6 +218,34 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
         // 设置底部导航选中状态为城市
         if (bottomNavigationView != null) {
             bottomNavigationView.setSelectedItemId(R.id.navigation_city);
+        }
+    }
+    
+    /**
+     * 处理权限请求结果
+     */
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == LocationHelper.REQUEST_LOCATION_PERMISSION) {
+            // 检查是否获得了权限
+            if (locationHelper.hasLocationPermission()) {
+                // 权限已获得，检查位置服务并开始定位
+                if (locationHelper.isLocationEnabled()) {
+                    Toast.makeText(this, R.string.locating, Toast.LENGTH_SHORT).show();
+                    showLoading();
+                    locationHelper.getCurrentLocation();
+                } else {
+                    Snackbar.make(findViewById(android.R.id.content), 
+                            "位置服务未开启，请开启后再试", 
+                            Snackbar.LENGTH_LONG)
+                            .setAction("设置", view -> locationHelper.openLocationSettings(this))
+                            .show();
+                }
+            } else {
+                // 权限被拒绝
+                Toast.makeText(this, R.string.location_permission_required, Toast.LENGTH_SHORT).show();
+            }
         }
     }
     
@@ -1025,6 +1155,12 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
         // 清理资源
         if (cityPreferences != null) {
             cityPreferences.onDestroy();
+        }
+        
+        // 释放位置工具类资源
+        if (locationHelper != null) {
+            locationHelper.onDestroy();
+            locationHelper = null;
         }
         
         super.onDestroy();

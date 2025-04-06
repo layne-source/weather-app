@@ -66,6 +66,16 @@
                     android:textColorHint="@color/dark_gray"
                     android:textSize="14sp" />
                 
+                <!-- 添加定位按钮 -->
+                <ImageButton
+                    android:id="@+id/btn_location"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/locate_current_city"
+                    android:src="@android:drawable/ic_menu_mylocation"
+                    app:tint="@color/dark_gray" />
+                
                 <!-- 添加清除搜索按钮 -->
                 <ImageButton
                     android:id="@+id/btn_clear_search"

@@ -29,6 +29,7 @@ import com.microntek.weatherapp.util.CityPreferences;
 import com.microntek.weatherapp.util.WeatherBackgroundUtil;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.microntek.weatherapp.util.WeatherDataCache;
+import com.microntek.weatherapp.util.LocationHelper;
 
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
@@ -39,6 +40,8 @@ import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
+
+import com.google.android.material.snackbar.Snackbar;
 
 public class MainActivity extends AppCompatActivity implements BottomNavigationView.OnNavigationItemSelectedListener {
     
@@ -78,6 +81,9 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
     private long lastBackPressTime = 0;
     private static final long EXIT_TIMEOUT = 2000; // 2秒内连按两次返回键退出
     
+    // 添加位置工具类
+    private LocationHelper locationHelper;
+    
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         // 应用主题设置
@@ -99,6 +105,21 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
         swipeRefreshLayout.setOnRefreshListener(this::refreshWeatherData);
         swipeRefreshLayout.setColorSchemeResources(R.color.colorPrimary);
         
+        // 初始化位置工具类
+        locationHelper = new LocationHelper(this, new LocationHelper.LocationCallback() {
+            @Override
+            public void onLocationSuccess(double latitude, double longitude) {
+                handleLocationSuccess(latitude, longitude);
+            }
+
+            @Override
+            public void onLocationFailed(String error) {
+                Log.e("MainActivity", "定位失败: " + error);
+                // 定位失败时直接显示错误，不再自动跳转
+                Toast.makeText(MainActivity.this, "定位失败: " + error, Toast.LENGTH_SHORT).show();
+            }
+        });
+        
         // 验证当前城市的缓存完整性
         City currentCity = cityPreferences.getCurrentCity();
         if (currentCity != null) {
@@ -117,8 +138,15 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
             });
         }
         
-        // 加载天气数据
-        loadWeatherData();
+        // 检查是否需要自动定位
+        List<City> savedCities = cityPreferences.getSavedCities();
+        if (savedCities.isEmpty()) {
+            // 如果没有保存的城市，直接跳转到城市管理页面
+            navigateToCityManager();
+        } else {
+            // 加载天气数据
+            loadWeatherData();
+        }
         
         // 检查启动标志
         if (getIntent().getBooleanExtra("fromOtherActivity", false)) {
@@ -741,6 +769,41 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
             }
         }
         
+        // 释放位置工具类资源
+        if (locationHelper != null) {
+            locationHelper.onDestroy();
+        }
+        
         super.onDestroy();
+    }
+    
+    /**
+     * 处理位置定位成功
+     */
+    private void handleLocationSuccess(double latitude, double longitude) {
+        // 在后台线程获取城市信息
+        executor.execute(() -> {
+            try {
+                // 获取当前城市信息
+                City city = WeatherApi.getCityByLocation(latitude, longitude);
+                
+                // 切换到主线程添加城市
+                mainHandler.post(() -> {
+                    // 添加城市并设置为当前城市
+                    boolean added = cityPreferences.addCity(city);
+                    if (added || cityPreferences.getSavedCities().contains(city)) {
+                        cityPreferences.setCurrentCity(city);
+                        // 加载天气数据
+                        loadWeatherData();
+                    } else {
+                        // 添加失败，跳转到城市管理页面
+                        navigateToCityManager();
+                    }
+                });
+            } catch (Exception e) {
+                Log.e("MainActivity", "获取城市信息失败: " + e.getMessage());
+                mainHandler.post(this::navigateToCityManager);
+            }
+        });
     }
 } 

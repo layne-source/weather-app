@@ -1094,4 +1094,77 @@ public class WeatherApi {
         String locationId = lon + "," + lat;
         return verifyAndRepairCache(context, locationId);
     }
+
+    /**
+     * 通过经纬度获取城市对象
+     * @param lat 纬度
+     * @param lon 经度
+     * @return 城市对象
+     */
+    public static City getCityByLocation(double lat, double lon) throws IOException, JSONException {
+        String location = lon + "," + lat;
+        String url = GEO_URL + "/city/lookup?location=" + location + "&key=" + API_KEY;
+        
+        Request request = new Request.Builder()
+                .url(url)
+                .build();
+        
+        try (Response response = client.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                throw new IOException("请求失败: " + response);
+            }
+            
+            String responseBody = response.body().string();
+            JSONObject json = new JSONObject(responseBody);
+            
+            // 检查返回码
+            if (!"200".equals(json.getString("code"))) {
+                throw new IOException("API返回错误: " + json.getString("code"));
+            }
+            
+            JSONArray locations = json.getJSONArray("location");
+            if (locations.length() > 0) {
+                JSONObject location0 = locations.getJSONObject(0);
+                
+                City city = new City();
+                city.setId(location0.getString("id"));
+                
+                // 设置经纬度
+                city.setLatitude(lat);
+                city.setLongitude(lon);
+                
+                // 设置省份
+                String adminArea = location0.getString("adm1"); // 省级
+                city.setProvince(adminArea);
+                
+                // 设置城市
+                String cityName = location0.getString("adm2"); // 市级
+                String districtName = location0.getString("name"); // 区县级
+                
+                // 如果是直辖市，则使用省级名称作为城市名
+                if (adminArea.equals("北京") || adminArea.equals("上海") || 
+                    adminArea.equals("天津") || adminArea.equals("重庆")) {
+                    city.setName(adminArea);
+                    city.setDistrict(districtName);
+                }
+                // 如果市名和区县名相同，或区县级是全市，则使用市名
+                else if (cityName.equals(districtName) || districtName.endsWith("全市")) {
+                    city.setName(cityName);
+                    city.setDistrict("");
+                }
+                // 否则使用区县名，并记录所属城市
+                else {
+                    city.setName(districtName);
+                    city.setDistrict(cityName);
+                }
+                
+                // 设置为当前位置标记
+                city.setCurrentLocation(true);
+                
+                return city;
+            }
+            
+            throw new IOException("未找到位置信息");
+        }
+    }
 } 
