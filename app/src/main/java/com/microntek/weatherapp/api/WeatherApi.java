@@ -1145,17 +1145,13 @@ public class WeatherApi {
                 if (adminArea.equals("北京") || adminArea.equals("上海") || 
                     adminArea.equals("天津") || adminArea.equals("重庆")) {
                     city.setName(adminArea);
-                    city.setDistrict(districtName);
-                }
-                // 如果市名和区县名相同，或区县级是全市，则使用市名
-                else if (cityName.equals(districtName) || districtName.endsWith("全市")) {
-                    city.setName(cityName);
+                    // 区县级信息可以保留在district字段但不显示
                     city.setDistrict("");
                 }
-                // 否则使用区县名，并记录所属城市
+                // 其他城市都只精确到市级别
                 else {
-                    city.setName(districtName);
-                    city.setDistrict(cityName);
+                    city.setName(cityName);
+                    city.setDistrict("");
                 }
                 
                 // 设置为当前位置标记
