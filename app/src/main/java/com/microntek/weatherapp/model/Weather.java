@@ -103,6 +103,13 @@ public class Weather {
         this.feelsLike = feelsLike;
     }
     
+    /**
+     * 获取体感温度（别名方法，用于与外部系统兼容）
+     */
+    public int getFeelsLikeTemp() {
+        return feelsLike;
+    }
+    
     public String getWeatherDesc() {
         return weatherDesc;
     }
@@ -119,6 +126,17 @@ public class Weather {
         this.weatherIcon = weatherIcon;
     }
     
+    /**
+     * 获取天气代码（从图标获取对应代码）
+     */
+    public String getWeatherCode() {
+        if (weatherIcon == null) {
+            return "";
+        }
+        // 从weatherIcon获取代码，通常已经包含代码信息
+        return weatherIcon;
+    }
+    
     public int getWeatherIconResource() {
         return weatherIconResource;
     }
@@ -133,6 +151,38 @@ public class Weather {
     
     public void setWind(String wind) {
         this.wind = wind;
+    }
+    
+    /**
+     * 获取风向
+     */
+    public String getWindDirection() {
+        if (wind == null || wind.isEmpty()) {
+            return "";
+        }
+        // 尝试从完整的风信息中提取风向部分
+        // 通常格式为"东北风 3级"，提取"东北风"部分
+        String[] parts = wind.split(" ");
+        if (parts.length > 0) {
+            return parts[0]; // 返回风向部分
+        }
+        return wind; // 如果无法解析，返回完整字符串
+    }
+    
+    /**
+     * 获取风速
+     */
+    public String getWindSpeed() {
+        if (wind == null || wind.isEmpty()) {
+            return "";
+        }
+        // 尝试从完整的风信息中提取风速部分
+        // 通常格式为"东北风 3级"，提取"3级"部分
+        String[] parts = wind.split(" ");
+        if (parts.length > 1) {
+            return parts[1]; // 返回风速部分
+        }
+        return ""; // 如果无法解析，返回空字符串
     }
     
     public int getHumidity() {
@@ -381,6 +431,13 @@ public class Weather {
     
     public void setUpdateTimestamp(long updateTimestamp) {
         this.updateTimestamp = updateTimestamp;
+    }
+    
+    /**
+     * 获取更新时间戳（别名方法，用于与外部系统兼容）
+     */
+    public long getUpdateTime() {
+        return updateTimestamp;
     }
     
     /**

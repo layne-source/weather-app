@@ -30,6 +30,7 @@ import com.microntek.weatherapp.util.WeatherBackgroundUtil;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.microntek.weatherapp.util.WeatherDataCache;
 import com.microntek.weatherapp.util.LocationHelper;
+import com.microntek.weatherapp.service.WeatherDataService;
 
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
@@ -717,6 +718,9 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
     protected void onResume() {
         super.onResume();
         
+        // 确保天气数据广播服务已启动
+        ensureWeatherServiceRunning();
+        
         // 设置底部导航选中状态为首页
         if (bottomNavigationView != null) {
             bottomNavigationView.setSelectedItemId(R.id.navigation_home);
@@ -750,6 +754,23 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
                 }
             });
         }
+    }
+    
+    /**
+     * 确保天气数据广播服务已启动
+     */
+    private void ensureWeatherServiceRunning() {
+        Intent serviceIntent = new Intent(this, WeatherDataService.class);
+        startService(serviceIntent);
+    }
+    
+    /**
+     * 通知服务城市已更改
+     * 在城市切换后调用
+     */
+    private void notifyServiceCityChanged() {
+        Intent intent = new Intent(WeatherDataService.ACTION_CITY_CHANGED);
+        sendBroadcast(intent);
     }
     
     @Override
@@ -793,6 +814,8 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
                     boolean added = cityPreferences.addCity(city);
                     if (added || cityPreferences.getSavedCities().contains(city)) {
                         cityPreferences.setCurrentCity(city);
+                        // 通知服务城市已变更
+                        notifyServiceCityChanged();
                         // 加载天气数据
                         loadWeatherData();
                     } else {

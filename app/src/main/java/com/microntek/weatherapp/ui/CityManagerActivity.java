@@ -33,11 +33,13 @@ import com.microntek.weatherapp.R;
 import com.microntek.weatherapp.api.WeatherApi;
 import com.microntek.weatherapp.model.City;
 import com.microntek.weatherapp.model.Weather;
+import com.microntek.weatherapp.service.WeatherDataService;
 import com.microntek.weatherapp.util.CityPreferences;
 import com.microntek.weatherapp.util.WeatherDataHelper;
 import com.microntek.weatherapp.util.ExecutorManager;
 import com.microntek.weatherapp.util.TaskManager;
 import com.microntek.weatherapp.util.LocationHelper;
+import com.microntek.weatherapp.util.LocationHelper.LocationCallback;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -105,7 +107,7 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
         cityPreferences = new CityPreferences(this);
         
         // 初始化位置工具类
-        locationHelper = new LocationHelper(this, new LocationHelper.LocationCallback() {
+        locationHelper = new LocationHelper(this, new LocationCallback() {
             @Override
             public void onLocationSuccess(double latitude, double longitude) {
                 processLocationResult(latitude, longitude);
@@ -550,6 +552,10 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
                         // 获取当前城市
                         currentCity = cityPreferences.getCurrentCity();
                         
+                        // 通知服务城市可能已变更
+                        Intent cityChangedIntent = new Intent(WeatherDataService.ACTION_CITY_CHANGED);
+                        sendBroadcast(cityChangedIntent);
+                        
                         // 对城市列表进行排序
                         List<City> sortedCities = com.microntek.weatherapp.util.WeatherDataHelper.sortCitiesList(
                                 updatedCities, currentCity);
@@ -641,6 +647,10 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
                 if (isFirstCity) {
                     cityPreferences.setCurrentCity(city);
                     currentCity = city;
+                    
+                    // 通知服务城市已变更
+                    Intent cityChangedIntent = new Intent(WeatherDataService.ACTION_CITY_CHANGED);
+                    sendBroadcast(cityChangedIntent);
                 }
                 
                 // 获取并排序城市列表
@@ -738,11 +748,15 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
                     return;
                 }
                 
-                // 刷新城市列表
-                List<City> updatedCities = cityPreferences.getSavedCities();
-                
                 // 获取当前城市（可能已经更新）
                 currentCity = cityPreferences.getCurrentCity();
+                
+                // 通知服务城市可能已变更
+                Intent cityChangedIntent = new Intent(WeatherDataService.ACTION_CITY_CHANGED);
+                sendBroadcast(cityChangedIntent);
+                
+                // 刷新城市列表
+                List<City> updatedCities = cityPreferences.getSavedCities();
                 
                 // 对城市列表进行排序
                 List<City> sortedCities = com.microntek.weatherapp.util.WeatherDataHelper.sortCitiesList(
@@ -825,6 +839,10 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
                 }
                 
                 currentCity = city;
+                
+                // 通知服务城市已变更
+                Intent cityChangedIntent = new Intent(WeatherDataService.ACTION_CITY_CHANGED);
+                sendBroadcast(cityChangedIntent);
                 
                 // 获取并排序城市列表
                 List<City> allCities = cityPreferences.getSavedCities();
@@ -972,6 +990,11 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
                     
                     // 从列表和偏好设置中删除城市
                     cityPreferences.removeCity(city);
+                    
+                    // 通知服务城市可能已变更
+                    Intent cityChangedIntent = new Intent(WeatherDataService.ACTION_CITY_CHANGED);
+                    sendBroadcast(cityChangedIntent);
+                    
                     cities.remove(position);
                     notifyItemRemoved(position);
                     notifyItemRangeChanged(position, cities.size() - position);
