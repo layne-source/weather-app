@@ -109,7 +109,7 @@ public class WeatherDataHelper {
         if (currentCity != null) {
             for (City city : cities) {
                 if (city.getId().equals(currentCity.getId())) {
-                    city.setCurrentLocation(true);
+                    // 不修改isCurrentLocation属性，它表示是否是定位城市，与当前选中城市无关
                     sortedCities.add(city);
                     break;
                 }
@@ -119,7 +119,7 @@ public class WeatherDataHelper {
         // 再添加其他城市
         for (City city : cities) {
             if (currentCity == null || !city.getId().equals(currentCity.getId())) {
-                city.setCurrentLocation(false);
+                // 不修改isCurrentLocation属性，它表示是否是定位城市，与当前选中城市无关
                 sortedCities.add(city);
             }
         }

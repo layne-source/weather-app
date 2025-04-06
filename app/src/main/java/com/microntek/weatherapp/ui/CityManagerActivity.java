@@ -324,7 +324,7 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
         // 首先添加当前城市
         for (City city : savedCities) {
             if (currentCity != null && city.getId().equals(currentCity.getId())) {
-                city.setCurrentLocation(true);
+                // 不要修改isCurrentLocation属性，它用于标识是否是定位城市
                 sortedCities.add(city);
                 break;
             }
@@ -333,7 +333,7 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
         // 然后添加其他城市
         for (City city : savedCities) {
             if (currentCity == null || !city.getId().equals(currentCity.getId())) {
-                city.setCurrentLocation(false);
+                // 不要修改isCurrentLocation属性，它用于标识是否是定位城市
                 sortedCities.add(city);
             }
         }
@@ -930,7 +930,7 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
                 holder.tvAirQuality.setVisibility(View.GONE);
             }
             
-            // 设置选中状态
+            // 设置选中状态 - 判断是否是当前选中城市
             boolean isCurrentCity = currentCity != null && 
                     currentCity.getId().equals(city.getId());
 
@@ -945,21 +945,35 @@ public class CityManagerActivity extends AppCompatActivity implements BottomNavi
                 onCityClick(city, true);
             });
             
-            // 设置删除按钮点击事件
-            holder.btnDelete.setOnClickListener(v -> {
-                // 无法删除当前选中的城市
-                if (isCurrentCity) {
+            // 处理删除按钮或导航图标
+            // 注意：isCurrentLocation表示是否为定位城市，与当前选中城市(isCurrentCity)是两个不同概念
+            // isCurrentLocation = true 表示这个城市是通过定位获取的用户位置城市
+            // isCurrentCity = true 表示这个城市是用户当前选择作为主要显示的城市
+            if (city.isCurrentLocation()) {
+                // 如果是定位城市，显示导航图标
+                holder.btnDelete.setImageResource(android.R.drawable.ic_menu_mylocation);
+                holder.btnDelete.setOnClickListener(v -> {
                     Toast.makeText(CityManagerActivity.this, 
-                            "不能删除当前选中的城市", Toast.LENGTH_SHORT).show();
-                    return;
-                }
-                
-                // 从列表和偏好设置中删除城市
-                cityPreferences.removeCity(city);
-                cities.remove(position);
-                notifyItemRemoved(position);
-                notifyItemRangeChanged(position, cities.size() - position);
-            });
+                            "这是您的当前位置城市", Toast.LENGTH_SHORT).show();
+                });
+            } else {
+                // 如果不是定位城市，显示删除图标
+                holder.btnDelete.setImageResource(android.R.drawable.ic_menu_delete);
+                holder.btnDelete.setOnClickListener(v -> {
+                    // 无法删除当前选中的城市
+                    if (isCurrentCity) {
+                        Toast.makeText(CityManagerActivity.this, 
+                                "不能删除当前选中的城市", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    
+                    // 从列表和偏好设置中删除城市
+                    cityPreferences.removeCity(city);
+                    cities.remove(position);
+                    notifyItemRemoved(position);
+                    notifyItemRangeChanged(position, cities.size() - position);
+                });
+            }
         }
 
         @Override
