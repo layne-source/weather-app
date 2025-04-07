@@ -7,6 +7,7 @@ import com.microntek.weatherapp.R;
 import com.microntek.weatherapp.model.City;
 import com.microntek.weatherapp.model.Weather;
 import com.microntek.weatherapp.util.WeatherDataCache;
+import com.microntek.weatherapp.WeatherApplication;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -636,22 +637,28 @@ public class WeatherApi {
      * 根据天气代码返回对应的图标资源ID
      */
     private static int getWeatherIconResource(String iconCode) {
+        // 构建资源名称
+        String resourceName = "icon_" + iconCode;
+        int resourceId = 0;
         try {
-            // 添加前缀"icon_"，因为Android资源名称必须以字母开头
-            String resourceName = "icon_" + iconCode;
-            Class<?> drawableClass = R.drawable.class;
-            java.lang.reflect.Field field = drawableClass.getField(resourceName);
-            return field.getInt(null);
+            // 使用Android资源查找机制，不使用反射
+            Context context = WeatherApplication.getAppContext();
+            resourceId = context.getResources().getIdentifier(
+                resourceName, "drawable", context.getPackageName());
         } catch (Exception e) {
-            // 如果找不到对应的资源，返回默认图标
+            Log.e("WeatherApi", "获取天气图标资源失败: " + e.getMessage());
+        }
+        // 如果没有找到资源，返回默认图标
+        if (resourceId == 0) {
             try {
-                // 尝试使用默认图标
-                return R.drawable.class.getField("icon_399").getInt(null);
-            } catch (Exception ex) {
-                // 如果默认图标也不存在，返回0
-                return 0;
+                Context context = WeatherApplication.getAppContext();
+                resourceId = context.getResources().getIdentifier(
+                    "icon_399", "drawable", context.getPackageName());
+            } catch (Exception e) {
+                Log.e("WeatherApi", "获取默认图标资源失败");
             }
         }
+        return resourceId;
     }
     
     /**

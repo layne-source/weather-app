@@ -1,6 +1,7 @@
 package com.microntek.weatherapp;
 
 import android.app.Application;
+import android.content.Context;
 import android.util.Log;
 
 import com.microntek.weatherapp.util.ExecutorManager;
@@ -13,16 +14,26 @@ import com.microntek.weatherapp.util.NetworkMonitor;
  */
 public class WeatherApplication extends Application {
     private static final String TAG = "WeatherApplication";
+    private static Context appContext;
     
     @Override
     public void onCreate() {
         super.onCreate();
+        appContext = getApplicationContext();
         Log.i(TAG, "应用启动");
         
         // 初始化网络监控
         NetworkMonitor.getInstance(this).startMonitoring();
         
         // 可以在这里进行其他全局初始化
+    }
+    
+    /**
+     * 获取应用上下文
+     * @return 应用上下文
+     */
+    public static Context getAppContext() {
+        return appContext;
     }
     
     @Override
