@@ -733,7 +733,7 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
         
         // 记录时间并提示用户再按一次退出
         lastBackPressTime = System.currentTimeMillis();
-        MessageManager.showError(this, "再按一次返回键退出应用");
+        MessageManager.showMessage(this, "再按一次返回键退出应用");
     }
     
     /**
