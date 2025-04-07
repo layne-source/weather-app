@@ -5,6 +5,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.graphics.Color;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
@@ -31,6 +32,7 @@ import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.microntek.weatherapp.util.WeatherDataCache;
 import com.microntek.weatherapp.util.LocationHelper;
 import com.microntek.weatherapp.service.WeatherDataService;
+import com.microntek.weatherapp.util.NetworkMonitor;
 
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
@@ -44,7 +46,11 @@ import java.util.concurrent.ExecutorService;
 
 import com.google.android.material.snackbar.Snackbar;
 
+import android.content.BroadcastReceiver;
+
 public class MainActivity extends AppCompatActivity implements BottomNavigationView.OnNavigationItemSelectedListener {
+    
+    private static final String TAG = "MainActivity";
     
     // UI组件
     private TextView tvCityName;
@@ -84,6 +90,9 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
     
     // 添加位置工具类
     private LocationHelper locationHelper;
+    
+    // 网络状态广播接收器
+    private BroadcastReceiver networkReceiver;
     
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -153,6 +162,30 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
         if (getIntent().getBooleanExtra("fromOtherActivity", false)) {
             isFirstLaunch = false;
         }
+        
+        // 注册网络恢复广播接收器
+        networkReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (NetworkMonitor.ACTION_NETWORK_RESTORED.equals(intent.getAction())) {
+                    Log.i(TAG, "网络已恢复，刷新界面数据");
+                    // 延迟2秒执行，避免与服务更新冲突
+                    mainHandler.postDelayed(() -> {
+                        if (!isFinishing()) {
+                            // 显示网络恢复提示
+                            Snackbar.make(findViewById(R.id.weather_main), 
+                                    "网络已恢复连接，正在更新天气数据", 
+                                    Snackbar.LENGTH_LONG).show();
+                            
+                            // 加载天气数据，但不触发后台刷新
+                            loadWeatherData(false);
+                        }
+                    }, 2000);
+                }
+            }
+        };
+        IntentFilter networkFilter = new IntentFilter(NetworkMonitor.ACTION_NETWORK_RESTORED);
+        registerReceiver(networkReceiver, networkFilter);
     }
     
     @Override
@@ -775,6 +808,15 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
     
     @Override
     protected void onDestroy() {
+        // 注销网络恢复广播接收器
+        if (networkReceiver != null) {
+            try {
+                unregisterReceiver(networkReceiver);
+            } catch (Exception e) {
+                Log.e(TAG, "注销网络接收器失败: " + e.getMessage());
+            }
+        }
+        
         // 清理资源
         if (cityPreferences != null) {
             cityPreferences.onDestroy();

@@ -5,6 +5,7 @@ import android.util.Log;
 
 import com.microntek.weatherapp.util.ExecutorManager;
 import com.microntek.weatherapp.util.TaskManager;
+import com.microntek.weatherapp.util.NetworkMonitor;
 
 /**
  * 应用Application类
@@ -18,11 +19,17 @@ public class WeatherApplication extends Application {
         super.onCreate();
         Log.i(TAG, "应用启动");
         
-        // 可以在这里进行全局初始化
+        // 初始化网络监控
+        NetworkMonitor.getInstance(this).startMonitoring();
+        
+        // 可以在这里进行其他全局初始化
     }
     
     @Override
     public void onTerminate() {
+        // 停止网络监控
+        NetworkMonitor.getInstance(this).stopMonitoring();
+        
         // 关闭所有执行器
         ExecutorManager.shutdownAll();
         TaskManager.clearAll();

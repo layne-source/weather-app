@@ -38,6 +38,9 @@ public class WeatherDataService extends Service {
     private final Object threadLock = new Object();
     private boolean shouldContinue = true;
     
+    // 网络状态广播接收器
+    private BroadcastReceiver networkReceiver;
+    
     // 接收更新请求的广播接收器
     private final BroadcastReceiver updateRequestReceiver = new BroadcastReceiver() {
         @Override
@@ -74,6 +77,22 @@ public class WeatherDataService extends Service {
         filter.addAction(ACTION_REQUEST_UPDATE);
         filter.addAction(ACTION_CITY_CHANGED);
         registerReceiver(updateRequestReceiver, filter);
+        
+        // 注册网络状态恢复广播接收器
+        networkReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (com.microntek.weatherapp.util.NetworkMonitor.ACTION_NETWORK_RESTORED.equals(intent.getAction())) {
+                    Log.i(TAG, "收到网络恢复广播，5秒后开始更新天气数据");
+                    // 网络恢复时，延迟5秒后更新天气数据
+                    ExecutorManager.executeOnMainDelayed(() -> {
+                        forceUpdateWeatherData();
+                    }, 5000);
+                }
+            }
+        };
+        IntentFilter networkFilter = new IntentFilter(com.microntek.weatherapp.util.NetworkMonitor.ACTION_NETWORK_RESTORED);
+        registerReceiver(networkReceiver, networkFilter);
         
         // 启动时立即广播一次当前天气
         updateWeatherBroadcast();
@@ -147,6 +166,10 @@ public class WeatherDataService extends Service {
     public void onDestroy() {
         try {
             unregisterReceiver(updateRequestReceiver);
+            // 注销网络恢复广播接收器
+            if (networkReceiver != null) {
+                unregisterReceiver(networkReceiver);
+            }
             stopUpdateThread();
         } catch (Exception e) {
             Log.e(TAG, "服务销毁时发生错误: " + e.getMessage(), e);
@@ -221,6 +244,12 @@ public class WeatherDataService extends Service {
      * 强制从网络刷新天气数据
      */
     private void forceUpdateWeatherData() {
+        // 先检查网络是否可用
+        if (!com.microntek.weatherapp.util.NetworkMonitor.getInstance(this).isNetworkAvailable()) {
+            Log.w(TAG, "网络不可用，无法强制更新天气数据");
+            return;
+        }
+        
         ExecutorManager.executeSingle(() -> {
             try {
                 CityPreferences preferences = new CityPreferences(this);
