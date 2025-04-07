@@ -404,6 +404,11 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
                         // 加载更新后的数据，但不触发后台刷新
                         loadWeatherData(false);
                         Toast.makeText(MainActivity.this, "天气数据已更新", Toast.LENGTH_SHORT).show();
+                        
+                        // 通知WeatherDataService数据已更新，以便向第三方应用广播最新数据
+                        Log.i(TAG, "通知天气服务更新第三方应用的天气数据");
+                        Intent updateIntent = new Intent(WeatherDataService.ACTION_REQUEST_UPDATE);
+                        sendBroadcast(updateIntent);
                     } else {
                         Toast.makeText(MainActivity.this, "更新失败，请稍后重试", Toast.LENGTH_SHORT).show();
                         swipeRefreshLayout.setRefreshing(false);
