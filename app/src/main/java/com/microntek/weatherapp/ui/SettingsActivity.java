@@ -28,6 +28,7 @@ import com.microntek.weatherapp.util.MessageManager;
 import com.microntek.weatherapp.util.ThemeHelper;
 import com.microntek.weatherapp.util.WeatherDataCache;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.microntek.weatherapp.util.ExecutorManager;
 
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -118,6 +119,10 @@ public class SettingsActivity extends AppCompatActivity implements BottomNavigat
                 // 关闭全局缓存管理器
                 WeatherDataCache.shutdown();
                 Log.i("SettingsActivity", "已关闭WeatherDataCache");
+
+                // 关闭所有执行器
+                ExecutorManager.shutdownAll();
+                Log.i("SettingsActivity", "已关闭所有执行器");
             } catch (Exception e) {
                 Log.e("SettingsActivity", "关闭资源失败: " + e.getMessage());
             }

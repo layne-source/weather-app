@@ -68,15 +68,12 @@ public class WeatherDataCache {
     // 单例实现
     private static WeatherDataCache instance;
     private final Context context;
-    private final ExecutorService backupExecutor; // 备份线程池
-    private static final Object LOCK = new Object(); // 用于同步的锁对象
     
     private WeatherDataCache(Context context) {
         this.context = context.getApplicationContext();
         cachePreferences = this.context.getSharedPreferences(CACHE_PREFS_NAME, Context.MODE_PRIVATE);
         backupPreferences = this.context.getSharedPreferences(BACKUP_PREFS_NAME, Context.MODE_PRIVATE);
         gson = new Gson();
-        backupExecutor = Executors.newSingleThreadExecutor();
         
         // 设置内存缓存大小，最多缓存20个城市的数据
         final int cacheSize = 20;
@@ -104,22 +101,13 @@ public class WeatherDataCache {
      * 在应用退出时调用
      */
     public static synchronized void shutdown() {
-        if (instance != null && instance.backupExecutor != null) {
+        if (instance != null) {
             try {
                 // 执行最后一次备份
                 instance.createBackup();
-                
-                // 等待备份任务完成并关闭线程池
-                instance.backupExecutor.shutdown();
-                if (!instance.backupExecutor.awaitTermination(3, TimeUnit.SECONDS)) {
-                    instance.backupExecutor.shutdownNow();
-                }
                 Log.i(TAG, "缓存管理器已关闭");
             } catch (Exception e) {
                 Log.e(TAG, "关闭缓存管理器失败: " + e.getMessage());
-                if (instance.backupExecutor != null && !instance.backupExecutor.isShutdown()) {
-                    instance.backupExecutor.shutdownNow();
-                }
             }
             instance = null;
         }
@@ -692,7 +680,7 @@ public class WeatherDataCache {
         if (importantDataModified || (now - lastBackupTime > dynamicInterval)) {
             // 检查设备存储空间
             if (hasEnoughStorage()) {
-                backupExecutor.execute(new BackupTask());
+                createBackup();
                 
                 // 重置重要数据修改标记
                 cachePreferences.edit()
@@ -791,7 +779,12 @@ public class WeatherDataCache {
      * 手动创建备份
      */
     public void createBackup() {
-        backupExecutor.execute(new BackupTask());
+        try {
+            // 使用ExecutorManager代替内部线程池
+            ExecutorManager.executeSingle(new BackupTask());
+        } catch (Exception e) {
+            Log.e(TAG, "提交备份任务失败: " + e.getMessage(), e);
+        }
     }
     
     /**
