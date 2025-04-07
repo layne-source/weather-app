@@ -3,7 +3,6 @@ package com.microntek.weatherapp.util;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.StatFs;
-import android.text.TextUtils;
 import android.util.Log;
 import android.util.LruCache;
 
@@ -15,7 +14,6 @@ import com.google.gson.reflect.TypeToken;
 
 import java.io.File;
 import java.lang.reflect.Type;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;

@@ -6,13 +6,13 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageButton;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.microntek.weatherapp.R;
 import com.microntek.weatherapp.model.City;
+import com.microntek.weatherapp.util.MessageManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -142,8 +142,8 @@ public class CityAdapter extends BaseCityAdapter<CityAdapter.ViewHolder> {
                 // 如果是定位城市，显示导航图标
                 holder.btnDelete.setImageResource(R.drawable.ic_location);
                 holder.btnDelete.setOnClickListener(v -> {
-                    Toast.makeText(context, 
-                            "这是您的当前位置城市", Toast.LENGTH_SHORT).show();
+                    MessageManager.showMessage(context, 
+                            "这是您的当前位置城市");
                 });
             } else {
                 // 如果不是定位城市，显示删除图标
@@ -151,8 +151,8 @@ public class CityAdapter extends BaseCityAdapter<CityAdapter.ViewHolder> {
                 holder.btnDelete.setOnClickListener(v -> {
                     // 无法删除当前选中的城市
                     if (isCurrentSelectedCity) {
-                        Toast.makeText(context, 
-                                "不能删除当前选中的城市", Toast.LENGTH_SHORT).show();
+                        MessageManager.showError(context, 
+                                "不能删除当前选中的城市");
                         return;
                     }
                     

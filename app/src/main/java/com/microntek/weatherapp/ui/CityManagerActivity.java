@@ -8,37 +8,30 @@ import androidx.annotation.NonNull;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.util.Log;
 import android.view.KeyEvent;
-import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.View;
-import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.google.android.material.bottomnavigation.BottomNavigationView;
-import com.google.android.material.snackbar.Snackbar;
 import com.microntek.weatherapp.MainActivity;
 import com.microntek.weatherapp.R;
 import com.microntek.weatherapp.adapter.CityAdapter;
 import com.microntek.weatherapp.api.WeatherApi;
 import com.microntek.weatherapp.model.City;
-import com.microntek.weatherapp.model.Weather;
-import com.microntek.weatherapp.service.WeatherDataService;
 import com.microntek.weatherapp.util.CityOperationHelper;
 import com.microntek.weatherapp.util.CityPreferences;
 import com.microntek.weatherapp.util.WeatherDataHelper;
 import com.microntek.weatherapp.util.ExecutorManager;
+import com.microntek.weatherapp.util.MessageManager;
 import com.microntek.weatherapp.util.TaskManager;
 import com.microntek.weatherapp.util.LocationHelper;
 import com.microntek.weatherapp.util.LocationHelper.LocationCallback;
@@ -46,9 +39,6 @@ import com.microntek.weatherapp.util.LocationHelper.LocationCallback;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 
 public class CityManagerActivity extends AppCompatActivity implements 
@@ -131,17 +121,16 @@ public class CityManagerActivity extends AppCompatActivity implements
                             @Override
                             public void onSuccess(City city) {
                                 hideLoading();
-                                Toast.makeText(CityManagerActivity.this, 
-                                        R.string.location_successful, Toast.LENGTH_SHORT).show();
+                                MessageManager.showSuccess(CityManagerActivity.this, 
+                                        getString(R.string.location_successful));
                                 addCity(city);
                             }
                             
                             @Override
                             public void onError(String errorMessage) {
                                 hideLoading();
-                                Toast.makeText(CityManagerActivity.this, 
-                                        "获取城市信息失败: " + errorMessage, 
-                                        Toast.LENGTH_SHORT).show();
+                                MessageManager.showError(CityManagerActivity.this, 
+                                        "获取城市信息失败: " + errorMessage);
                             }
                         });
             }
@@ -149,9 +138,8 @@ public class CityManagerActivity extends AppCompatActivity implements
             @Override
             public void onLocationFailed(String error) {
                 hideLoading();
-                Toast.makeText(CityManagerActivity.this, 
-                        getString(R.string.location_failed) + ": " + error, 
-                        Toast.LENGTH_SHORT).show();
+                MessageManager.showError(CityManagerActivity.this, 
+                        getString(R.string.location_failed) + ": " + error);
             }
         });
         
@@ -189,16 +177,14 @@ public class CityManagerActivity extends AppCompatActivity implements
             
             // 检查位置服务是否开启
             if (!locationHelper.isLocationEnabled()) {
-                Snackbar.make(findViewById(android.R.id.content), 
+                MessageManager.showActionMessage(findViewById(android.R.id.content), 
                         "位置服务未开启，请开启后再试", 
-                        Snackbar.LENGTH_LONG)
-                        .setAction("设置", view -> locationHelper.openLocationSettings(this))
-                        .show();
+                        "设置", view -> locationHelper.openLocationSettings(this));
                 return;
             }
             
             // 显示正在定位提示
-            Toast.makeText(this, R.string.locating, Toast.LENGTH_SHORT).show();
+            MessageManager.showMessage(this, getString(R.string.locating));
             showLoading();
             
             // 开始定位
@@ -226,19 +212,17 @@ public class CityManagerActivity extends AppCompatActivity implements
             if (locationHelper.hasLocationPermission()) {
                 // 权限已获得，检查位置服务并开始定位
                 if (locationHelper.isLocationEnabled()) {
-                    Toast.makeText(this, R.string.locating, Toast.LENGTH_SHORT).show();
+                    MessageManager.showMessage(this, getString(R.string.locating));
                     showLoading();
                     locationHelper.getCurrentLocation();
                 } else {
-                    Snackbar.make(findViewById(android.R.id.content), 
+                    MessageManager.showActionMessage(findViewById(android.R.id.content), 
                             "位置服务未开启，请开启后再试", 
-                            Snackbar.LENGTH_LONG)
-                            .setAction("设置", view -> locationHelper.openLocationSettings(this))
-                            .show();
+                            "设置", view -> locationHelper.openLocationSettings(this));
                 }
             } else {
                 // 权限被拒绝
-                Toast.makeText(this, R.string.location_permission_required, Toast.LENGTH_SHORT).show();
+                MessageManager.showError(this, getString(R.string.location_permission_required));
             }
         }
     }
@@ -390,12 +374,11 @@ public class CityManagerActivity extends AppCompatActivity implements
                 e.printStackTrace();
                 ExecutorManager.executeOnMain(() -> {
                     hideLoading();
-                    Snackbar.make(
+                    MessageManager.showActionMessage(
                             findViewById(android.R.id.content),
                             "搜索城市失败: " + e.getMessage(),
-                            Snackbar.LENGTH_LONG)
-                            .setAction("重试", v -> searchCity(cityName))
-                            .show();
+                            "重试",
+                            v -> searchCity(cityName));
                 });
                 return;
             }
@@ -512,12 +495,11 @@ public class CityManagerActivity extends AppCompatActivity implements
                     public void onError(String errorMessage) {
                         hideLoading();
                         Log.e(TAG, "加载城市天气失败: " + errorMessage);
-                        Snackbar.make(
+                        MessageManager.showActionMessage(
                                 findViewById(android.R.id.content),
                                 "加载城市天气失败: " + errorMessage,
-                                Snackbar.LENGTH_LONG)
-                                .setAction("重试", v -> loadCitiesWeather())
-                                .show();
+                                "重试", 
+                                v -> loadCitiesWeather());
                     }
                 });
     }
@@ -631,8 +613,8 @@ public class CityManagerActivity extends AppCompatActivity implements
         if (loadingView != null) {
             loadingView.setVisibility(View.VISIBLE);
         } else {
-            // 使用Toast作为备选方案
-            Toast.makeText(this, "正在搜索...", Toast.LENGTH_SHORT).show();
+            // 使用MessageManager作为备选方案
+            MessageManager.showMessage(this, "正在搜索...");
         }
     }
     

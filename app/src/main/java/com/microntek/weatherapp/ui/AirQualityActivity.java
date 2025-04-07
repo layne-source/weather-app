@@ -4,7 +4,6 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.widget.TextView;
 import android.widget.FrameLayout;
-import android.content.Context;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
@@ -15,6 +14,7 @@ import com.microntek.weatherapp.api.WeatherApi;
 import com.microntek.weatherapp.model.City;
 import com.microntek.weatherapp.model.Weather;
 import com.microntek.weatherapp.util.CityPreferences;
+import com.microntek.weatherapp.util.MessageManager;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import android.view.MenuItem;
@@ -26,7 +26,6 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import android.os.Handler;
 import android.os.Looper;
-import android.widget.Toast;
 import android.graphics.drawable.GradientDrawable;
 
 /**
@@ -127,7 +126,7 @@ public class AirQualityActivity extends AppCompatActivity implements BottomNavig
         
         if (currentCity == null) {
             // 如果没有选中的城市，显示提示并返回
-            Toast.makeText(this, "请先添加城市", Toast.LENGTH_SHORT).show();
+            MessageManager.showError(this, "请先添加城市");
             finish();
             return;
         }
@@ -143,8 +142,8 @@ public class AirQualityActivity extends AppCompatActivity implements BottomNavig
                         AirQualityActivity.this, city.getLatitude(), city.getLongitude());
                 
                 if (weather == null) {
-                    mainHandler.post(() -> Toast.makeText(AirQualityActivity.this, 
-                            "无可用的天气数据，请连接网络后重试", Toast.LENGTH_LONG).show());
+                    mainHandler.post(() -> MessageManager.showError(AirQualityActivity.this, 
+                            "无可用的天气数据，请连接网络后重试"));
                     return;
                 }
                 
@@ -161,8 +160,8 @@ public class AirQualityActivity extends AppCompatActivity implements BottomNavig
                 mainHandler.post(() -> updateUI(weather));
             } catch (IOException | JSONException e) {
                 e.printStackTrace();
-                mainHandler.post(() -> Toast.makeText(AirQualityActivity.this, 
-                        "数据加载失败: " + e.getMessage(), Toast.LENGTH_LONG).show());
+                mainHandler.post(() -> MessageManager.showError(AirQualityActivity.this, 
+                        "数据加载失败: " + e.getMessage()));
             }
         });
     }

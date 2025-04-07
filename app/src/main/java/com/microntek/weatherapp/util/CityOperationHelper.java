@@ -4,9 +4,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.util.Log;
 import android.view.View;
-import android.widget.Toast;
 
-import com.google.android.material.snackbar.Snackbar;
 import com.microntek.weatherapp.api.WeatherApi;
 import com.microntek.weatherapp.model.City;
 import com.microntek.weatherapp.model.Weather;
@@ -151,7 +149,7 @@ public class CityOperationHelper {
         
         // 检查城市数量限制
         if (cityPreferences.getSavedCities().size() >= 5) {
-            Toast.makeText(context, "最多只能添加5个城市", Toast.LENGTH_SHORT).show();
+            MessageManager.showError(context, "最多只能添加5个城市");
             TaskManager.completeTask(taskId);
             return;
         }
@@ -169,8 +167,7 @@ public class CityOperationHelper {
                 
                 if (cityExists) {
                     ExecutorManager.executeOnMain(() -> {
-                        Toast.makeText(context, 
-                                "该城市已添加", Toast.LENGTH_SHORT).show();
+                        MessageManager.showMessage(context, "该城市已添加");
                         TaskManager.completeTask(taskId);
                         if (callback != null) {
                             callback.onError("该城市已添加");
@@ -187,8 +184,7 @@ public class CityOperationHelper {
                 
                 if (!success) {
                     ExecutorManager.executeOnMain(() -> {
-                        Toast.makeText(context, 
-                                "添加城市失败", Toast.LENGTH_SHORT).show();
+                        MessageManager.showError(context, "添加城市失败");
                         TaskManager.completeTask(taskId);
                         if (callback != null) {
                             callback.onError("添加城市失败");
@@ -218,9 +214,9 @@ public class CityOperationHelper {
                             "已添加城市: " + city.getName();
                     
                     if (rootView != null) {
-                        Snackbar.make(rootView, message, Snackbar.LENGTH_LONG).show();
+                        MessageManager.showActionMessage(rootView, message, "确定", null);
                     } else {
-                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show();
+                        MessageManager.showSuccess(context, message);
                     }
                     
                     // 完成任务并回调
@@ -233,13 +229,12 @@ public class CityOperationHelper {
                 Log.e(TAG, "添加城市时出错: " + e.getMessage());
                 ExecutorManager.executeOnMain(() -> {
                     if (rootView != null) {
-                        Snackbar.make(rootView, 
+                        MessageManager.showActionMessage(rootView, 
                                 "添加城市失败: " + e.getMessage(), 
-                                Snackbar.LENGTH_LONG).show();
+                                "重试", v -> addCity(city, callback));
                     } else {
-                        Toast.makeText(context, 
-                                "添加城市失败: " + e.getMessage(), 
-                                Toast.LENGTH_SHORT).show();
+                        MessageManager.showError(context, 
+                                "添加城市失败: " + e.getMessage());
                     }
                     
                     TaskManager.completeTask(taskId);
@@ -277,8 +272,8 @@ public class CityOperationHelper {
                 // 如果是当前城市，不能删除
                 if (currentCity != null && city.getId().equals(currentCity.getId())) {
                     ExecutorManager.executeOnMain(() -> {
-                        Toast.makeText(context, 
-                                "不能删除当前选中的城市", Toast.LENGTH_SHORT).show();
+                        MessageManager.showError(context, 
+                                "不能删除当前选中的城市");
                         TaskManager.completeTask(taskId);
                         if (callback != null) {
                             callback.onError("不能删除当前选中的城市");
@@ -292,8 +287,8 @@ public class CityOperationHelper {
                 
                 if (!success) {
                     ExecutorManager.executeOnMain(() -> {
-                        Toast.makeText(context, 
-                                "删除城市失败", Toast.LENGTH_SHORT).show();
+                        MessageManager.showError(context, 
+                                "删除城市失败");
                         TaskManager.completeTask(taskId);
                         if (callback != null) {
                             callback.onError("删除城市失败");
@@ -315,13 +310,12 @@ public class CityOperationHelper {
                 
                 ExecutorManager.executeOnMain(() -> {
                     if (rootView != null) {
-                        Snackbar.make(rootView, 
+                        MessageManager.showActionMessage(rootView, 
                                 "已删除城市: " + city.getName(), 
-                                Snackbar.LENGTH_LONG).show();
+                                "撤销", null);
                     } else {
-                        Toast.makeText(context, 
-                                "已删除城市: " + city.getName(), 
-                                Toast.LENGTH_SHORT).show();
+                        MessageManager.showSuccess(context, 
+                                "已删除城市: " + city.getName());
                     }
                     
                     TaskManager.completeTask(taskId);
@@ -333,13 +327,12 @@ public class CityOperationHelper {
                 Log.e(TAG, "删除城市时出错: " + e.getMessage());
                 ExecutorManager.executeOnMain(() -> {
                     if (rootView != null) {
-                        Snackbar.make(rootView, 
+                        MessageManager.showActionMessage(rootView, 
                                 "删除城市失败: " + e.getMessage(), 
-                                Snackbar.LENGTH_LONG).show();
+                                "重试", v -> deleteCity(city, callback));
                     } else {
-                        Toast.makeText(context, 
-                                "删除城市失败: " + e.getMessage(), 
-                                Toast.LENGTH_SHORT).show();
+                        MessageManager.showError(context, 
+                                "删除城市失败: " + e.getMessage());
                     }
                     
                     TaskManager.completeTask(taskId);
@@ -376,8 +369,8 @@ public class CityOperationHelper {
                 City current = cityPreferences.getCurrentCity();
                 if (current != null && current.getId().equals(city.getId())) {
                     ExecutorManager.executeOnMain(() -> {
-                        Toast.makeText(context, 
-                                city.getName() + " 已是当前城市", Toast.LENGTH_SHORT).show();
+                        MessageManager.showMessage(context, 
+                                city.getName() + " 已是当前城市");
                         TaskManager.completeTask(taskId);
                         if (callback != null) {
                             callback.onError("已是当前城市");
@@ -391,8 +384,7 @@ public class CityOperationHelper {
                 
                 if (!success) {
                     ExecutorManager.executeOnMain(() -> {
-                        Toast.makeText(context, 
-                                "切换城市失败", Toast.LENGTH_SHORT).show();
+                        MessageManager.showError(context, "切换城市失败");
                         TaskManager.completeTask(taskId);
                         if (callback != null) {
                             callback.onError("切换城市失败");
@@ -412,13 +404,12 @@ public class CityOperationHelper {
                 
                 ExecutorManager.executeOnMain(() -> {
                     if (rootView != null) {
-                        Snackbar.make(rootView, 
+                        MessageManager.showActionMessage(rootView, 
                                 "已切换到城市: " + city.getName(), 
-                                Snackbar.LENGTH_SHORT).show();
+                                "确定", null);
                     } else {
-                        Toast.makeText(context, 
-                                "已切换到城市: " + city.getName(), 
-                                Toast.LENGTH_SHORT).show();
+                        MessageManager.showSuccess(context, 
+                                "已切换到城市: " + city.getName());
                     }
                     
                     // 完成任务
@@ -433,13 +424,12 @@ public class CityOperationHelper {
                 Log.e(TAG, "切换城市时出错: " + e.getMessage());
                 ExecutorManager.executeOnMain(() -> {
                     if (rootView != null) {
-                        Snackbar.make(rootView, 
+                        MessageManager.showActionMessage(rootView, 
                                 "切换城市失败: " + e.getMessage(), 
-                                Snackbar.LENGTH_LONG).show();
+                                "重试", v -> switchCurrentCity(city, shouldReturnToMain, callback));
                     } else {
-                        Toast.makeText(context, 
-                                "切换城市失败: " + e.getMessage(), 
-                                Toast.LENGTH_SHORT).show();
+                        MessageManager.showError(context, 
+                                "切换城市失败: " + e.getMessage());
                     }
                     
                     TaskManager.completeTask(taskId);

@@ -19,7 +19,6 @@ import android.view.View;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.microntek.weatherapp.api.WeatherApi;
 import com.microntek.weatherapp.model.City;
@@ -29,10 +28,10 @@ import com.microntek.weatherapp.util.AirPollutionUtil;
 import com.microntek.weatherapp.util.CityPreferences;
 import com.microntek.weatherapp.util.WeatherBackgroundUtil;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
-import com.microntek.weatherapp.util.WeatherDataCache;
 import com.microntek.weatherapp.util.LocationHelper;
 import com.microntek.weatherapp.service.WeatherDataService;
 import com.microntek.weatherapp.util.NetworkMonitor;
+import com.microntek.weatherapp.util.MessageManager;
 
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
@@ -43,8 +42,6 @@ import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
-
-import com.google.android.material.snackbar.Snackbar;
 
 import android.content.BroadcastReceiver;
 
@@ -126,7 +123,7 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
             public void onLocationFailed(String error) {
                 Log.e("MainActivity", "定位失败: " + error);
                 // 定位失败时直接显示错误，不再自动跳转
-                Toast.makeText(MainActivity.this, "定位失败: " + error, Toast.LENGTH_SHORT).show();
+                MessageManager.showError(MainActivity.this, "定位失败: " + error);
             }
         });
         
@@ -173,9 +170,10 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
                     mainHandler.postDelayed(() -> {
                         if (!isFinishing()) {
                             // 显示网络恢复提示
-                            Snackbar.make(findViewById(R.id.weather_main), 
+                            MessageManager.showActionMessage(
+                                    findViewById(R.id.weather_main), 
                                     "网络已恢复连接，正在更新天气数据", 
-                                    Snackbar.LENGTH_LONG).show();
+                                    "确定", null);
                             
                             // 加载天气数据，但不触发后台刷新
                             loadWeatherData(false);
@@ -237,7 +235,7 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
         City currentCity = cityPreferences.getCurrentCity();
         if (currentCity == null) {
             // 如果没有当前城市，显示提示并跳转到城市管理页面
-            Toast.makeText(this, "请先添加城市", Toast.LENGTH_SHORT).show();
+            MessageManager.showError(this, "请先添加城市");
             navigateToCityManager();
             return;
         }
@@ -249,7 +247,7 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
         boolean isOffline = !isNetworkAvailable();
         if (isOffline) {
             // 显示离线模式提示
-            Toast.makeText(this, "网络连接不可用，显示缓存数据", Toast.LENGTH_SHORT).show();
+            MessageManager.showMessage(this, "网络连接不可用，显示缓存数据");
         }
         
         // 在后台线程加载数据
@@ -274,8 +272,8 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
                 
                 if (currentWeather == null) {
                     mainHandler.post(() -> {
-                        Toast.makeText(MainActivity.this, 
-                                "无可用的天气数据，请连接网络后重试", Toast.LENGTH_LONG).show();
+                        MessageManager.showError(MainActivity.this, 
+                                "无可用的天气数据，请连接网络后重试");
                         if (swipeRefreshLayout.isRefreshing()) {
                             swipeRefreshLayout.setRefreshing(false);
                         }
@@ -336,8 +334,8 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
             } catch (Exception e) {
                 e.printStackTrace();
                 mainHandler.post(() -> {
-                    Toast.makeText(MainActivity.this, 
-                            "数据加载失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                    MessageManager.showError(MainActivity.this, 
+                            "数据加载失败: " + e.getMessage());
                     
                     // 如果是下拉刷新，停止刷新动画
                     if (swipeRefreshLayout.isRefreshing()) {
@@ -388,7 +386,7 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
         
         // 检查网络连接
         if (!isNetworkAvailable()) {
-            Toast.makeText(this, "网络连接不可用，无法刷新数据", Toast.LENGTH_SHORT).show();
+            MessageManager.showError(this, "网络连接不可用，无法刷新数据");
             swipeRefreshLayout.setRefreshing(false);
             return;
         }
@@ -403,14 +401,14 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
                     if (updatedWeather != null) {
                         // 加载更新后的数据，但不触发后台刷新
                         loadWeatherData(false);
-                        Toast.makeText(MainActivity.this, "天气数据已更新", Toast.LENGTH_SHORT).show();
+                        MessageManager.showMessage(MainActivity.this, "天气数据已更新");
                         
                         // 通知WeatherDataService数据已更新，以便向第三方应用广播最新数据
                         Log.i(TAG, "通知天气服务更新第三方应用的天气数据");
                         Intent updateIntent = new Intent(WeatherDataService.ACTION_REQUEST_UPDATE);
                         sendBroadcast(updateIntent);
                     } else {
-                        Toast.makeText(MainActivity.this, "更新失败，请稍后重试", Toast.LENGTH_SHORT).show();
+                        MessageManager.showError(MainActivity.this, "更新失败，请稍后重试");
                         swipeRefreshLayout.setRefreshing(false);
                     }
                 });
@@ -418,8 +416,8 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
                 e.printStackTrace();
                 mainHandler.post(() -> {
                     swipeRefreshLayout.setRefreshing(false);
-                    Toast.makeText(MainActivity.this, 
-                            "刷新失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                    MessageManager.showError(MainActivity.this, 
+                            "刷新失败: " + e.getMessage());
                 });
             }
         });
@@ -735,7 +733,7 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
         
         // 记录时间并提示用户再按一次退出
         lastBackPressTime = System.currentTimeMillis();
-        Toast.makeText(this, "再按一次返回键退出应用", Toast.LENGTH_SHORT).show();
+        MessageManager.showError(this, "再按一次返回键退出应用");
     }
     
     /**

@@ -8,7 +8,6 @@ import com.microntek.weatherapp.model.City;
 import com.microntek.weatherapp.model.Weather;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 /**

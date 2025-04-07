@@ -12,7 +12,6 @@ import android.util.Log;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
@@ -25,6 +24,7 @@ import com.microntek.weatherapp.MainActivity;
 import com.microntek.weatherapp.api.WeatherApi;
 import com.microntek.weatherapp.model.City;
 import com.microntek.weatherapp.util.CityPreferences;
+import com.microntek.weatherapp.util.MessageManager;
 import com.microntek.weatherapp.util.ThemeHelper;
 import com.microntek.weatherapp.util.WeatherDataCache;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
@@ -161,11 +161,11 @@ public class SettingsActivity extends AppCompatActivity implements BottomNavigat
     private void verifyAndRepairCache() {
         City currentCity = cityPreferences.getCurrentCity();
         if (currentCity == null) {
-            Toast.makeText(this, "没有选择的城市", Toast.LENGTH_SHORT).show();
+            MessageManager.showError(this, "没有选择的城市");
             return;
         }
         
-        Toast.makeText(this, "正在验证缓存数据...", Toast.LENGTH_SHORT).show();
+        MessageManager.showMessage(this, "正在验证缓存数据...");
         
         // 在后台线程验证缓存
         executor.execute(() -> {
@@ -175,18 +175,15 @@ public class SettingsActivity extends AppCompatActivity implements BottomNavigat
                 
                 mainHandler.post(() -> {
                     if (repaired) {
-                        Toast.makeText(SettingsActivity.this, 
-                                "已修复部分缓存数据", Toast.LENGTH_SHORT).show();
+                        MessageManager.showSuccess(SettingsActivity.this, "已修复部分缓存数据");
                     } else {
-                        Toast.makeText(SettingsActivity.this, 
-                                "缓存数据验证完成，未发现问题", Toast.LENGTH_SHORT).show();
+                        MessageManager.showSuccess(SettingsActivity.this, "缓存数据验证完成，未发现问题");
                     }
                 });
             } catch (Exception e) {
                 Log.e("SettingsActivity", "验证缓存失败: " + e.getMessage());
                 mainHandler.post(() -> {
-                    Toast.makeText(SettingsActivity.this, 
-                            "验证缓存失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    MessageManager.showError(SettingsActivity.this, "验证缓存失败: " + e.getMessage());
                 });
             }
         });
@@ -217,14 +214,12 @@ public class SettingsActivity extends AppCompatActivity implements BottomNavigat
                 WeatherDataCache.getInstance(SettingsActivity.this).clearAllCache();
                 
                 mainHandler.post(() -> {
-                    Toast.makeText(SettingsActivity.this, 
-                            "所有缓存已清除", Toast.LENGTH_SHORT).show();
+                    MessageManager.showSuccess(SettingsActivity.this, "所有缓存已清除");
                 });
             } catch (Exception e) {
                 Log.e("SettingsActivity", "清除缓存失败: " + e.getMessage());
                 mainHandler.post(() -> {
-                    Toast.makeText(SettingsActivity.this, 
-                            "清除缓存失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    MessageManager.showError(SettingsActivity.this, "清除缓存失败: " + e.getMessage());
                 });
             }
         });

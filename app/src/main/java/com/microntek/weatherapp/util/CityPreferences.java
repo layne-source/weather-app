@@ -9,14 +9,11 @@ import com.microntek.weatherapp.model.City;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
-import java.io.IOException;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-
-import org.json.JSONException;
 
 /**
  * 城市偏好设置工具类，用于管理用户保存的城市列表
