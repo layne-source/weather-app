@@ -419,7 +419,7 @@ public class WeatherApi {
         // 设置当前天气描述和图标
         String code = now.getString("icon");
         weather.setWeatherDesc(now.getString("text"));
-        weather.setWeatherIcon(getWeatherIcon(code));
+        weather.setWeatherIcon(code);
         weather.setWeatherIconResource(getWeatherIconResource(code));
         
         // 风力信息
@@ -502,7 +502,7 @@ public class WeatherApi {
             
             // 天气描述和图标
             forecast.setWeatherDesc(day.getString("textDay"));
-            forecast.setWeatherIcon(getWeatherIcon(day.getString("iconDay")));
+            forecast.setWeatherIcon(day.getString("iconDay"));
             forecast.setWeatherIconResource(getWeatherIconResource(day.getString("iconDay")));
             
             forecasts.add(forecast);
@@ -659,77 +659,6 @@ public class WeatherApi {
             }
         }
         return resourceId;
-    }
-    
-    /**
-     * 根据天气代码返回对应的天气图标（Emoji）
-     * 保留此方法是为了兼容性考虑
-     */
-    private static String getWeatherIcon(String iconCode) {
-        // 和风天气图标编码与emoji映射
-        // 这里只列出了常见的几种，可以根据需要扩展
-        switch (iconCode) {
-            case "100": // 晴天
-                return "☀️";
-            case "101": // 多云
-            case "102": // 少云
-            case "103": // 晴间多云
-                return "🌤️";
-            case "104": // 阴天
-                return "☁️";
-            case "150": // 晴天夜间
-            case "151": // 多云夜间
-            case "152": // 少云夜间
-            case "153": // 晴间多云夜间
-                return "🌙";
-            case "300": // 阵雨
-            case "301": // 强阵雨
-            case "302": // 雷阵雨
-            case "303": // 强雷阵雨
-            case "304": // 雷阵雨伴有冰雹
-                return "⛈️";
-            case "305": // 小雨
-            case "306": // 中雨
-            case "307": // 大雨
-            case "308": // 极端降雨
-            case "309": // 毛毛雨/细雨
-            case "310": // 暴雨
-            case "311": // 大暴雨
-            case "312": // 特大暴雨
-            case "313": // 冻雨
-            case "314": // 小到中雨
-            case "315": // 中到大雨
-            case "316": // 大到暴雨
-            case "317": // 暴雨到大暴雨
-            case "318": // 大暴雨到特大暴雨
-                return "🌧️";
-            case "400": // 小雪
-            case "401": // 中雪
-            case "402": // 大雪
-            case "403": // 暴雪
-            case "404": // 雨夹雪
-            case "405": // 雨雪天气
-            case "406": // 阵雨夹雪
-            case "407": // 阵雪
-            case "408": // 小到中雪
-            case "409": // 中到大雪
-            case "410": // 大到暴雪
-                return "❄️";
-            case "500": // 薄雾
-            case "501": // 雾
-            case "502": // 霾
-            case "503": // 扬沙
-            case "504": // 浮尘
-            case "507": // 沙尘暴
-            case "508": // 强沙尘暴
-                return "🌫️";
-            case "900": // 热
-                return "🔥";
-            case "901": // 冷
-                return "❄️";
-            default:
-                return "❓";
-        }
     }
 
     /**
