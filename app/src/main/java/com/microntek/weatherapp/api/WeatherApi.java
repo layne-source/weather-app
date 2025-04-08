@@ -636,7 +636,7 @@ public class WeatherApi {
     /**
      * 根据天气代码返回对应的图标资源ID
      */
-    private static int getWeatherIconResource(String iconCode) {
+    public static int getWeatherIconResource(String iconCode) {
         // 构建资源名称
         String resourceName = "icon_" + iconCode;
         int resourceId = 0;
