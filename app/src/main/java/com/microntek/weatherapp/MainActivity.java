@@ -32,6 +32,7 @@ import com.microntek.weatherapp.util.LocationHelper;
 import com.microntek.weatherapp.service.WeatherDataService;
 import com.microntek.weatherapp.util.NetworkMonitor;
 import com.microntek.weatherapp.util.MessageManager;
+import com.microntek.weatherapp.util.ExecutorManager;
 
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
@@ -72,7 +73,6 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
     
     // 数据处理
     private CityPreferences cityPreferences;
-    private final Executor executor = Executors.newSingleThreadExecutor();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     
     // 添加请求码常量
@@ -132,7 +132,7 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
         if (currentCity != null) {
             String locationId = currentCity.getLongitude() + "," + currentCity.getLatitude();
             // 在后台线程验证并修复缓存
-            executor.execute(() -> {
+            ExecutorManager.executeParallel(() -> {
                 try {
                     boolean repaired = WeatherApi.verifyAndRepairCacheByLocation(
                             MainActivity.this, currentCity.getLatitude(), currentCity.getLongitude());
@@ -250,8 +250,8 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
             MessageManager.showMessage(this, "网络连接不可用，显示缓存数据");
         }
         
-        // 在后台线程加载数据
-        executor.execute(() -> {
+        // 在后台线程加载数据 - 使用ExecutorManager替代本地executor
+        ExecutorManager.executeParallel(() -> {
             try {
                 final String locationId = city.getLongitude() + "," + city.getLatitude();
                 
@@ -357,7 +357,8 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
      * 在后台刷新天气数据
      */
     private void refreshWeatherDataInBackground(City city) {
-        executor.execute(() -> {
+        // 使用ExecutorManager替代本地executor
+        ExecutorManager.executeParallel(() -> {
             try {
                 // 从API获取最新数据并更新缓存
                 WeatherApi.refreshWeatherDataByLocation(
@@ -391,7 +392,8 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
             return;
         }
         
-        executor.execute(() -> {
+        // 使用ExecutorManager替代本地executor
+        ExecutorManager.executeParallel(() -> {
             try {
                 // 忽略缓存，直接从API获取最新数据
                 final Weather updatedWeather = WeatherApi.refreshWeatherDataByLocation(
@@ -764,7 +766,7 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
         
         // 同步所有城市的缓存数据
         if (cityPreferences != null && !swipeRefreshLayout.isRefreshing()) {
-            executor.execute(() -> {
+            ExecutorManager.executeParallel(() -> {
                 try {
                     // 首先同步当前城市
                     City currentCity = cityPreferences.getCurrentCity();
@@ -825,16 +827,6 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
             cityPreferences.onDestroy();
         }
         
-        // 关闭线程池
-        if (executor instanceof ExecutorService) {
-            try {
-                ((ExecutorService) executor).shutdown();
-                Log.i("MainActivity", "已关闭主线程池");
-            } catch (Exception e) {
-                Log.e("MainActivity", "关闭线程池出错: " + e.getMessage());
-            }
-        }
-        
         // 释放位置工具类资源
         if (locationHelper != null) {
             locationHelper.onDestroy();
@@ -848,7 +840,7 @@ public class MainActivity extends AppCompatActivity implements BottomNavigationV
      */
     private void handleLocationSuccess(double latitude, double longitude) {
         // 在后台线程获取城市信息
-        executor.execute(() -> {
+        ExecutorManager.executeParallel(() -> {
             try {
                 // 获取当前城市信息
                 City city = WeatherApi.getCityByLocation(latitude, longitude);

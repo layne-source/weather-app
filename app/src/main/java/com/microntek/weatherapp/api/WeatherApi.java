@@ -192,6 +192,17 @@ public class WeatherApi {
      * @return 更新的Weather对象
      */
     public static Weather getAirQuality(String cityId, Weather weather) throws IOException, JSONException {
+        if (cityId.contains(",")) {
+            Context context = WeatherApplication.getAppContext();
+            String cityName = getCityNameByLocation(Double.parseDouble(cityId.split(",")[1]), Double.parseDouble(cityId.split(",")[0]));
+            List<City> citiesWithCache = searchCityWithCache(context, cityName);
+            // 如果有结果，获取第一个城市
+            if (!citiesWithCache.isEmpty()) {
+                City city = citiesWithCache.get(0);
+                cityId = city.getId();
+            }
+        }
+
         String url = BASE_URL + "/air/now?location=" + cityId + "&key=" + API_KEY;
         
         Request request = new Request.Builder()
